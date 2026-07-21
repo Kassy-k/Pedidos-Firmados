@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedidos Firmados — Kassel Home & Living</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --bg: #eef1ef; --paper: #ffffff; --rule: #d7ddda; --ink: #1c2b2d; --muted: #62726f;
+    --stamp: #b23a2e; --stamp-dim: #b23a2e22; --brass: #93711f; --brass-dim: #93711f1a;
+    --ok: #2f6b4f; --ok-dim: #2f6b4f1a; --radius: 3px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background: repeating-linear-gradient(180deg, transparent, transparent 27px, var(--rule) 28px), var(--bg);
+    color:var(--ink); min-height:100vh; padding:28px 16px 80px;
+  }
+  .wrap{max-width:780px;margin:0 auto;}
+  header{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:18px;}
+  header h1{font-family: Georgia, "Times New Roman", serif;font-weight:700;letter-spacing:0.02em;font-size:22px;margin:0;text-transform:uppercase;}
+  header .sub{font-size:11px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;font-family: ui-monospace, "SF Mono", Menlo, monospace;}
+  .settings-toggle{background:none;border:none;color:var(--muted);font-size:11px;text-decoration:underline;padding:0;cursor:pointer;letter-spacing:0.04em;}
+  .tabs{display:flex;gap:6px;margin-bottom:18px;}
+  .tab{flex:1;text-align:center;padding:10px 6px;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius);cursor:pointer;font-family: ui-monospace, monospace;}
+  .tab.active{color:#fff;background:var(--ink);border-color:var(--ink);font-weight:700;}
+  .steps{display:flex;gap:6px;margin-bottom:22px;}
+  .step{flex:1;text-align:center;padding:8px 4px;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);border-bottom:3px solid var(--rule);font-family: ui-monospace, "SF Mono", Menlo, monospace;}
+  .step.active{color:var(--ink);border-bottom-color:var(--stamp);font-weight:700;}
+  .step.done{color:var(--ink);border-bottom-color:var(--ok);}
+  .card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius);padding:22px;margin-bottom:16px;box-shadow: 0 1px 0 rgba(0,0,0,0.03);}
+  .drop{border:2px dashed var(--rule);border-radius:var(--radius);padding:36px 20px;text-align:center;cursor:pointer;transition: border-color .15s, background .15s;}
+  .drop:hover, .drop.drag{border-color:var(--brass);background:var(--brass-dim);}
+  .drop .big{font-size:15px;font-weight:600;margin-bottom:4px;}
+  .drop .small{font-size:12px;color:var(--muted);}
+  input[type=file]{display:none;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(120px,1fr));gap:10px;margin-top:18px;}
+  .thumb{position:relative;border:1px solid var(--rule);border-radius:var(--radius);overflow:hidden;background:#fafaf8;cursor:grab;user-select:none;}
+  .thumb.dragging{opacity:0.4;}
+  .thumb img{width:100%;height:150px;object-fit:cover;display:block;}
+  .thumb .n{position:absolute;top:4px;left:4px;background:var(--ink);color:#fff;font-family: ui-monospace, monospace;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .thumb .rm{position:absolute;top:4px;right:4px;background:#fff;border:1px solid var(--rule);width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;color:var(--stamp);}
+  .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
+  button{font-family:inherit;font-size:13px;font-weight:600;letter-spacing:0.02em;padding:10px 18px;border-radius:var(--radius);border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;transition:transform .08s, background .15s;}
+  button:hover{background:#000;}
+  button:active{transform:translateY(1px);}
+  button.secondary{background:#fff;color:var(--ink);}
+  button.secondary:hover{background:#f3f3f0;}
+  button.danger{background:#fff;color:var(--stamp);border-color:var(--stamp);}
+  button.danger:hover{background:var(--stamp-dim);}
+  button.small{padding:6px 12px;font-size:12px;}
+  button:disabled{opacity:0.4;cursor:not-allowed;}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;}
+  .banner{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius);font-size:13px;margin-bottom:16px;border:1px solid;flex-wrap:wrap;}
+  .banner.warn{background:#fdf3e8;border-color:#e0b976;color:#7a5a1a;}
+  .banner.remind{background:var(--stamp-dim);border-color:var(--stamp);color:var(--stamp);}
+  .banner.info{background:var(--brass-dim);border-color:var(--brass);color:var(--brass);}
+  .banner button.x{margin-left:auto;background:none;border:none;color:inherit;font-size:16px;padding:0 4px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;font-family: ui-monospace, monospace;}
+  .field input[type=text], .field input[type=number]{width:100%;padding:9px 10px;border:1px solid var(--rule);border-radius:var(--radius);font-family: ui-monospace, monospace; font-size:14px;}
+  .preview-strip{display:flex;gap:10px;overflow-x:auto;padding:4px 0 12px;}
+  .preview-strip canvas{border:1px solid var(--rule);border-radius:2px;max-height:220px;}
+  .meta-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--rule);font-size:13px;}
+  .meta-line:last-child{border-bottom:none;}
+  .meta-line .k{color:var(--muted);font-family: ui-monospace, monospace;font-size:11px;letter-spacing:0.05em;text-transform:uppercase;}
+  .meta-line .v{font-family: ui-monospace, monospace;font-weight:600;}
+  .stamp-box{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px 20px;text-align:center;}
+  .stamp{width:150px;height:150px;border-radius:50%;border:4px solid var(--ok);color:var(--ok);display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(-8deg) scale(0.3);opacity:0;font-family: Georgia, serif;text-transform:uppercase;letter-spacing:0.06em;animation: stampdown .35s ease-out .1s forwards;}
+  .stamp b{font-size:20px;letter-spacing:0.08em;}
+  .stamp span{font-size:11px;font-family: ui-monospace, monospace;margin-top:4px;letter-spacing:0.02em;}
+  @keyframes stampdown{0%{transform:rotate(-8deg) scale(2.2);opacity:0;}60%{transform:rotate(-8deg) scale(0.92);opacity:1;}100%{transform:rotate(-8deg) scale(1);opacity:1;}}
+  .wa-btn{display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;border-color:#25D366;font-size:14px;padding:12px 22px;}
+  .wa-btn:hover{background:#1fb959;}
+  .loader{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid var(--rule);border-top-color:var(--ink);animation:spin .7s linear infinite;margin-right:8px;vertical-align:-2px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .status{font-size:12px;color:var(--muted);margin-top:10px;min-height:16px;}
+  a.link{color:var(--brass);font-weight:600;text-decoration:none;border-bottom:1px solid var(--brass-dim);}
+  .file-row{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:1px solid var(--rule);}
+  .file-row:last-child{border-bottom:none;}
+  .file-row .date-badge{font-family: ui-monospace, monospace;font-weight:700;font-size:13px;background:var(--ink);color:#fff;padding:6px 10px;border-radius:var(--radius);white-space:nowrap;}
+  .file-row .info{flex:1;min-width:0;}
+  .file-row .info .fn{font-family: ui-monospace, monospace;font-size:12px;color:var(--muted);word-break:break-all;}
+  .file-row .info .sm{font-size:13px;margin-top:2px;}
+  .file-row .acts{display:flex;gap:6px;flex-shrink:0;}
+  .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty-state .big{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:6px;}
+  .modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,43,45,0.75);z-index:50;align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:var(--paper);border-radius:var(--radius);max-width:640px;width:100%;padding:20px;}
+  .modal-box .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+  .modal-box .modal-head h3{margin:0;font-size:15px;font-family: ui-monospace, monospace;}
+  .modal-box .close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;padding:0;}
+  .modal-pages canvas{width:100%;border:1px solid var(--rule);margin-bottom:10px;border-radius:2px;}
+  .connect-box{text-align:center;padding:50px 20px;}
+  .connect-box .big{font-size:16px;font-weight:700;margin-bottom:8px;}
+  .connect-box .small{font-size:13px;color:var(--muted);margin-bottom:20px;max-width:420px;margin-left:auto;margin-right:auto;}
+  .who-badge{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;}
+  .who-badge .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Pedidos Firmados</h1>
+      <div class="sub">Kassel Home &amp; Living</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;">
+      <span id="whoBadge"></span>
+      <button class="settings-toggle" onclick="toggleSettings()">Ajustes</button>
+    </div>
+  </header>
+
+  <div id="settingsPanel" class="card" style="display:none;">
+    <div class="field">
+      <label>Hora de recordatorio (24h, hora Ciudad de México)</label>
+      <input type="number" id="reminderHourInput" min="0" max="23" value="15">
+    </div>
+    <div class="row">
+      <button onclick="saveSettings()">Guardar ajustes</button>
+      <button class="secondary" onclick="disconnectDrive()">Cerrar sesión de Drive</button>
+      <button class="secondary" onclick="toggleSettings()">Cerrar</button>
+    </div>
+  </div>
+
+  <div id="reminderBanner"></div>
+
+  <!-- CONNECT GATE -->
+  <div id="connectGate" class="card">
+    <div class="connect-box">
+      <div class="big">Conecta tu cuenta de Google</div>
+      <div class="small">Los archivos se guardan y se ven aquí mismo — nunca necesitas abrir Drive directamente. Solo se usa tu inicio de sesión para guardar los datos de forma segura y permanente.</div>
+      <button onclick="connectDrive()">Conectar Google Drive</button>
+      <div class="status" id="connectStatus"></div>
+    </div>
+  </div>
+
+  <div id="appBody" style="display:none;">
+    <div class="tabs">
+      <div class="tab active" id="tabFiles" onclick="showTab('files')">Archivos guardados</div>
+      <div class="tab" id="tabUpload" onclick="showTab('upload')">+ Subir pedido</div>
+    </div>
+
+    <div id="viewFiles">
+      <div class="card">
+        <div id="filesList"></div>
+      </div>
+    </div>
+
+    <div id="viewUpload" style="display:none;">
+      <div class="steps">
+        <div class="step" id="step-1">1 · Cargar</div>
+        <div class="step" id="step-2">2 · Ordenar</div>
+        <div class="step" id="step-3">3 · Confirmar</div>
+        <div class="step" id="step-4">4 · Notificar</div>
+      </div>
+
+      <div class="card" id="cardUpload">
+        <div class="drop" id="dropZone" onclick="document.getElementById('fileInput').click()">
+          <div class="big">Arrastra las páginas o el PDF ya unido aquí</div>
+          <div class="small">Uno o varios archivos (fotos o PDF) · o toca para elegir</div>
+        </div>
+        <input type="file" id="fileInput" multiple accept="image/*,application/pdf">
+        <div id="grid" class="grid"></div>
+        <div class="row" id="uploadActions" style="display:none;">
+          <button onclick="runAutoOrder()" id="btnAutoOrder">Acomodar orden automáticamente</button>
+          <button class="secondary" onclick="goToPreviewStep()">Continuar →</button>
+          <button class="secondary" onclick="clearAll()">Vaciar</button>
+        </div>
+        <div class="hint">Si son varias páginas sueltas, arrastra las miniaturas para reordenar manualmente.</div>
+        <div class="status" id="uploadStatus"></div>
+      </div>
+
+      <div class="card" id="cardConfirm" style="display:none;">
+        <div id="confirmStatus" class="status"></div>
+        <div class="preview-strip" id="previewStrip"></div>
+        <div id="metaBlock" style="display:none;">
+          <div class="meta-line"><span class="k">Fecha detectada</span><span class="v"><input type="text" id="dateInput" style="font:inherit;border:none;text-align:right;width:120px;background:transparent;"></span></div>
+          <div class="meta-line"><span class="k">Resumen</span><span class="v" id="summaryOut" style="font-weight:400;"></span></div>
+          <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v" id="filenameOut"></span></div>
+          <div class="meta-line"><span class="k">Huella (checksum)</span><span class="v" id="checksumOut"></span></div>
+          <div class="meta-line"><span class="k">Tamaño</span><span class="v" id="sizeOut"></span></div>
+        </div>
+        <div id="dupWarning"></div>
+        <div class="row" id="confirmActions" style="display:none;">
+          <button onclick="finalizeAndSave(false)">Confirmar y guardar en Drive</button>
+          <button class="secondary" onclick="backToUpload()">← Volver a las páginas</button>
+        </div>
+      </div>
+
+      <div class="card" id="cardDone" style="display:none;">
+        <div class="stamp-box">
+          <div class="stamp"><b>Listo</b><span id="stampDate"></span></div>
+          <div style="margin-top:18px;font-size:13px;color:var(--muted);max-width:420px;">
+            El archivo quedó guardado de forma permanente y ya aparece en <strong>Archivos guardados</strong>. Ahora avisa al grupo:
+          </div>
+          <div class="row" style="justify-content:center;">
+            <a id="waLink" href="#" target="_blank"><button class="wa-btn">Avisar por WhatsApp</button></a>
+          </div>
+          <div class="row" style="justify-content:center;">
+            <button class="secondary" onclick="showTab('files')">Ver archivos guardados</button>
+            <button class="secondary" onclick="resetTool()">Subir otro pedido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="modalTitle"></h3>
+      <button class="close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-pages" id="modalPages"></div>
+    <div class="row" id="modalMoreRow" style="display:none;">
+      <button class="secondary small" onclick="loadMoreModalPages()">Cargar más páginas</button>
+    </div>
+  </div>
+</div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const { PDFDocument } = PDFLib;
+
+const CLIENT_ID = '1053576077507-e2n8l9vdglrrlhb6u60lf42r8hp1gldt.apps.googleusercontent.com';
+const ROOT_FOLDER_ID = '1rmGYZlDEZFGJbGotVxQR5v0EGU6B2g46';
+const SCOPES = 'https://www.googleapis.com/auth/drive';
+const PREVIEW_PAGE_BATCH = 20;
+
+let units = [];
+let uidCounter = 0;
+let mergedBytes = null;
+let detectedDate = null;
+let summaryText = '';
+let checksumHex = '';
+let filenameFinal = '';
+let duplicateEntry = null;
+let settings = { reminderHour: 15 };
+let filesIndex = [];
+
+let tokenClient = null;
+let driveToken = null;
+let userEmail = '';
+
+// modal viewer state
+let modalPdfDoc = null;
+let modalPageCursor = 0;
+
+// ---------- local (non-sensitive) settings only ----------
+async function getLocalSetting(key, fallback){
+  try{ const r = await window.storage.get(key, false); return r ? JSON.parse(r.value) : fallback; }
+  catch(e){ return fallback; }
+}
+async function setLocalSetting(key, value){
+  try{ await window.storage.set(key, JSON.stringify(value), false); }catch(e){}
+}
+
+// ---------- Google auth ----------
+function gsiReady(){ return typeof google !== 'undefined' && google.accounts && google.accounts.oauth2; }
+
+function initGoogleAuth(){
+  if(!gsiReady()){ setTimeout(initGoogleAuth, 300); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: onTokenResponse
+  });
+}
+
+function connectDrive(){
+  const status = document.getElementById('connectStatus');
+  if(!tokenClient){ status.textContent = 'Cargando Google Identity Services, intenta de nuevo en un segundo…'; initGoogleAuth(); return; }
+  status.innerHTML = '<span class="loader"></span>Abriendo ventana de Google…';
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+async function onTokenResponse(resp){
+  const status = document.getElementById('connectStatus');
+  if(resp.error){
+    status.textContent = 'No se pudo conectar (' + resp.error + '). Intenta de nuevo — si sigue fallando, puede que este origen no esté autorizado todavía en el cliente de OAuth.';
+    return;
+  }
+  driveToken = resp.access_token;
+  try{
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers:{ Authorization:'Bearer '+driveToken } });
+    const info = await r.json();
+    userEmail = info.email || '';
+  }catch(e){ userEmail = ''; }
+  document.getElementById('connectGate').style.display = 'none';
+  document.getElementById('appBody').style.display = 'block';
+  document.getElementById('whoBadge').innerHTML = `<span class="who-badge"><span class="dot"></span>${userEmail || 'Conectado'}</span>`;
+  await init();
+}
+
+function disconnectDrive(){
+  if(driveToken && google.accounts && google.accounts.oauth2){
+    google.accounts.oauth2.revoke(driveToken, () => {});
+  }
+  driveToken = null; userEmail = '';
+  document.getElementById('appBody').style.display = 'none';
+  document.getElementById('connectGate').style.display = 'block';
+  toggleSettings();
+}
+
+function authHeaders(extra){
+  return Object.assign({ Authorization: 'Bearer ' + driveToken }, extra || {});
+}
+
+// ---------- Drive REST helpers ----------
+async function driveListFiles(){
+  const q = encodeURIComponent(`'${ROOT_FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime,md5Checksum)&orderBy=name desc&pageSize=1000`;
+  const r = await fetch(url, { headers: authHeaders() });
+  if(!r.ok) throw new Error('No se pudo listar archivos de Drive');
+  const data = await r.json();
+  return data.files || [];
+}
+
+async function driveUploadNew(bytes, filename){
+  const metadata = { name: filename, parents: [ROOT_FOLDER_ID] };
+  const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,createdTime,md5Checksum', {
+    method: 'POST',
+    headers: authHeaders({
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'application/pdf',
+      'X-Upload-Content-Length': String(bytes.length)
+    }),
+    body: JSON.stringify(metadata)
+  });
+  if(!initRes.ok) throw new Error('No se pudo iniciar la subida: ' + await initRes.text());
+  const uploadUrl = initRes.headers.get('Location');
+  const putRes = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: bytes });
+  if(!putRes.ok) throw new Error('Falló la subida: ' + await putRes.text());
+  return await putRes.json();
+}
+
+async function driveReplaceContent(fileId, bytes){
+  const initRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=resumable&fields=id,name,size,createdTime,md5Checksum`, {
+    method: 'PATCH',
+    headers: authHeaders({
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': 'application/pdf',
+      'X-Upload-Content-Length': String(bytes.length)
+    }),
+    body: JSON.stringify({})
+  });
+  if(!initRes.ok) throw new Error('No se pudo iniciar el reemplazo: ' + await initRes.text());
+  const uploadUrl = initRes.headers.get('Location');
+  const putRes = await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: bytes });
+  if(!putRes.ok) throw new Error('Falló el reemplazo: ' + await putRes.text());
+  return await putRes.json();
+}
+
+async function driveDownloadBytes(fileId){
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: authHeaders() });
+  if(!r.ok) throw new Error('No se pudo descargar el archivo de Drive');
+  const buf = await r.arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+// ---------- init ----------
+async function init(){
+  settings = await getLocalSetting('settings', { reminderHour: 15 });
+  document.getElementById('reminderHourInput').value = settings.reminderHour;
+  wireDropZone();
+  await refreshIndex();
+  await checkReminder();
+}
+initGoogleAuth();
+
+function toggleSettings(){
+  const p = document.getElementById('settingsPanel');
+  p.style.display = p.style.display === 'none' ? 'block' : 'none';
+}
+async function saveSettings(){
+  settings.reminderHour = parseInt(document.getElementById('reminderHourInput').value, 10) || 15;
+  await setLocalSetting('settings', settings);
+  toggleSettings();
+  checkReminder();
+}
+
+async function checkReminder(){
+  const todayISO = mexicoCityTodayISO();
+  const hasToday = filesIndex.some(h => h.date === todayISO);
+  const hourNow = mexicoCityHourNow();
+  const el = document.getElementById('reminderBanner');
+  if(!hasToday && hourNow >= settings.reminderHour){
+    el.innerHTML = `<div class="banner remind">⏰ Aún no se ha guardado el archivo de pedidos firmados de hoy.
+      <button class="x" onclick="this.parentElement.remove()">✕</button></div>`;
+  } else { el.innerHTML = ''; }
+}
+function mexicoCityTodayISO(){ return new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Mexico_City' }); }
+function mexicoCityHourNow(){ return parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City', hour: 'numeric', hour12:false }), 10); }
+
+// ---------- Archivos guardados ----------
+function parseDateFromFilename(name){
+  const m = name.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
+async function refreshIndex(){
+  const list = document.getElementById('filesList');
+  list.innerHTML = '<div class="status"><span class="loader"></span>Cargando archivos desde Drive…</div>';
+  try{
+    const files = await driveListFiles();
+    filesIndex = files.map(f => ({
+      id: f.id, filename: f.name, date: parseDateFromFilename(f.name),
+      sizeKB: f.size ? Math.round(parseInt(f.size,10)/1024) : 0,
+      timestamp: f.createdTime ? new Date(f.createdTime).getTime() : 0,
+      checksum: f.md5Checksum || ''
+    })).filter(e => e.date);
+    renderFilesList();
+  }catch(e){
+    list.innerHTML = `<div class="banner warn">⚠️ No se pudo cargar la lista de Drive. ${e.message}</div>`;
+  }
+}
+
+function renderFilesList(){
+  const list = document.getElementById('filesList');
+  if(!filesIndex.length){
+    list.innerHTML = `<div class="empty-state"><div class="big">Todavía no hay archivos guardados</div>Sube el primer pedido firmado desde la pestaña de arriba.</div>`;
+    return;
+  }
+  const sorted = [...filesIndex].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
+  list.innerHTML = sorted.map(e => `
+    <div class="file-row">
+      <div class="date-badge">${e.date}</div>
+      <div class="info">
+        <div class="sm">${e.filename}</div>
+        <div class="fn">${e.sizeKB} KB${e.checksum ? ' · md5 ' + e.checksum.slice(0,10) : ''}</div>
+      </div>
+      <div class="acts">
+        <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
+        <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function viewEntry(fileId){
+  const overlay = document.getElementById('modalOverlay');
+  const pages = document.getElementById('modalPages');
+  document.getElementById('modalTitle').textContent = 'Cargando…';
+  document.getElementById('modalMoreRow').style.display = 'none';
+  pages.innerHTML = '<div class="status"><span class="loader"></span>Descargando desde Drive…</div>';
+  overlay.classList.add('open');
+  try{
+    const bytes = await driveDownloadBytes(fileId);
+    modalPdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
+    modalPageCursor = 0;
+    document.getElementById('modalTitle').textContent = `${modalPdfDoc.numPages} página(s)`;
+    pages.innerHTML = '';
+    await loadMoreModalPages();
+  }catch(e){
+    pages.innerHTML = '<div class="status">No se pudo cargar el documento.</div>';
+  }
+}
+
+async function loadMoreModalPages(){
+  if(!modalPdfDoc) return;
+  const pages = document.getElementById('modalPages');
+  const end = Math.min(modalPageCursor + PREVIEW_PAGE_BATCH, modalPdfDoc.numPages);
+  for(let i=modalPageCursor+1;i<=end;i++){
+    const page = await modalPdfDoc.getPage(i);
+    const viewport = page.getViewport({ scale: 1.1 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    pages.appendChild(canvas);
+  }
+  modalPageCursor = end;
+  document.getElementById('modalMoreRow').style.display = modalPageCursor < modalPdfDoc.numPages ? 'flex' : 'none';
+}
+
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); modalPdfDoc = null; }
+
+async function downloadEntry(fileId, filename){
+  try{
+    const bytes = await driveDownloadBytes(fileId);
+    const blob = new Blob([bytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){ alert('No se pudo descargar: ' + e.message); }
+}
+
+// ---------- tabs / steps ----------
+function showTab(tab){
+  document.getElementById('viewFiles').style.display = tab === 'files' ? 'block' : 'none';
+  document.getElementById('viewUpload').style.display = tab === 'upload' ? 'block' : 'none';
+  document.getElementById('tabFiles').classList.toggle('active', tab === 'files');
+  document.getElementById('tabUpload').classList.toggle('active', tab === 'upload');
+  if(tab === 'files') refreshIndex();
+}
+function setStep(n){
+  for(let i=1;i<=4;i++){
+    const el = document.getElementById('step-'+i);
+    el.classList.remove('active','done');
+    if(i < n) el.classList.add('done');
+    if(i === n) el.classList.add('active');
+  }
+}
+setStep(1);
+
+// ---------- drop zone / file loading ----------
+function wireDropZone(){
+  const dz = document.getElementById('dropZone');
+  const input = document.getElementById('fileInput');
+  input.addEventListener('change', e => addFiles(e.target.files));
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); addFiles(e.dataTransfer.files); });
+}
+
+async function addFiles(fileList){
+  const status = document.getElementById('uploadStatus');
+  status.textContent = 'Procesando páginas…';
+  for(const file of Array.from(fileList)){
+    const id = 'p' + (uidCounter++);
+    if(file.type === 'application/pdf'){
+      try{
+        const buf = await file.arrayBuffer();
+        const thumb = await pdfFirstPageThumb(buf.slice(0));
+        units.push({ id, kind:'pdf', file, thumb });
+      }catch(e){ status.textContent = 'No se pudo leer un PDF: ' + file.name; }
+    } else if(file.type.startsWith('image/')){
+      const thumb = await fileToDataUrl(file);
+      units.push({ id, kind:'image', file, thumb });
+    }
+  }
+  status.textContent = units.length ? `${units.length} archivo(s) cargado(s).` : '';
+  renderGrid();
+}
+
+function fileToDataUrl(file){
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); });
+}
+
+async function pdfFirstPageThumb(arrayBuffer){
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({ scale: 0.5 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+function renderGrid(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  units.forEach((u, idx) => {
+    const div = document.createElement('div');
+    div.className = 'thumb'; div.draggable = true; div.dataset.id = u.id;
+    div.innerHTML = `<span class="n">${idx+1}</span><img src="${u.thumb}"><span class="rm" onclick="removeUnit('${u.id}')">✕</span>`;
+    div.addEventListener('dragstart', () => div.classList.add('dragging'));
+    div.addEventListener('dragend', () => { div.classList.remove('dragging'); renderGrid(); });
+    div.addEventListener('dragover', e => {
+      e.preventDefault();
+      const dragging = grid.querySelector('.dragging');
+      if(!dragging || dragging === div) return;
+      const rect = div.getBoundingClientRect();
+      const after = (e.clientX - rect.left) > rect.width/2;
+      div.parentNode.insertBefore(dragging, after ? div.nextSibling : div);
+      reorderFromDOM();
+    });
+    grid.appendChild(div);
+  });
+  document.getElementById('uploadActions').style.display = units.length ? 'flex' : 'none';
+}
+function reorderFromDOM(){
+  const ids = Array.from(document.getElementById('grid').children).map(c => c.dataset.id);
+  units.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+}
+function removeUnit(id){ units = units.filter(u => u.id !== id); renderGrid(); }
+function clearAll(){ units = []; renderGrid(); document.getElementById('uploadStatus').textContent = ''; }
+
+// ---------- AI auto order ----------
+async function runAutoOrder(){
+  if(units.length < 2) return;
+  const btn = document.getElementById('btnAutoOrder');
+  btn.disabled = true;
+  const status = document.getElementById('uploadStatus');
+  status.innerHTML = '<span class="loader"></span>Analizando orden de las páginas…';
+  try{
+    const content = [{
+      type: 'text',
+      text: 'Estas son fotos de páginas escaneadas de un pedido firmado, en un orden posiblemente incorrecto. ' +
+            'Cada imagen corresponde en orden a estos IDs: ' + units.map(u=>u.id).join(', ') + '. ' +
+            'Usa pistas como números de página visibles, continuidad de contenido, encabezados y firmas al final para determinar el orden correcto de lectura. ' +
+            'Responde ÚNICAMENTE con un array JSON de esos IDs en el orden correcto, sin texto adicional ni backticks. Ejemplo: ["p0","p2","p1"]'
+    }];
+    for(const u of units){
+      const base64 = u.thumb.split(',')[1];
+      const mediaType = u.thumb.substring(5, u.thumb.indexOf(';'));
+      content.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } });
+    }
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, messages: [{ role: 'user', content }] })
+    });
+    const data = await resp.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    const clean = text.replace(/```json|```/g, '').trim();
+    const order = JSON.parse(clean);
+    if(Array.isArray(order) && order.length === units.length){
+      units.sort((a,b) => order.indexOf(a.id) - order.indexOf(b.id));
+      status.textContent = 'Orden sugerido aplicado. Puedes ajustarlo arrastrando.';
+    } else { status.textContent = 'No se pudo determinar un orden claro, se mantuvo el orden original.'; }
+  }catch(e){ document.getElementById('uploadStatus').textContent = 'No se pudo analizar el orden automáticamente, se mantuvo el orden original.'; }
+  btn.disabled = false;
+  renderGrid();
+}
+
+// ---------- merge, preview, detect date ----------
+async function goToPreviewStep(){
+  if(!units.length) return;
+  document.getElementById('cardUpload').style.display = 'none';
+  document.getElementById('cardConfirm').style.display = 'block';
+  setStep(2);
+  const cs = document.getElementById('confirmStatus');
+  cs.innerHTML = '<span class="loader"></span>Uniendo páginas en un solo PDF…';
+  document.getElementById('metaBlock').style.display = 'none';
+  document.getElementById('confirmActions').style.display = 'none';
+  document.getElementById('previewStrip').innerHTML = '';
+  document.getElementById('dupWarning').innerHTML = '';
+
+  try{ mergedBytes = await buildMergedPdf(); }
+  catch(e){ cs.textContent = 'Ocurrió un error uniendo las páginas: ' + e.message; return; }
+
+  await renderPreview(mergedBytes);
+  checksumHex = await sha256Hex(mergedBytes);
+
+  cs.innerHTML = '<span class="loader"></span>Detectando la fecha del documento…';
+  await detectDateAndSummary();
+  checkDuplicate();
+
+  const sizeKB = Math.round(mergedBytes.length / 1024);
+  document.getElementById('sizeOut').textContent = sizeKB > 1024 ? (sizeKB/1024).toFixed(1) + ' MB' : sizeKB + ' KB';
+
+  cs.textContent = '';
+  document.getElementById('metaBlock').style.display = 'block';
+  document.getElementById('confirmActions').style.display = 'flex';
+  setStep(3);
+}
+
+async function buildMergedPdf(){
+  const outDoc = await PDFDocument.create();
+  for(const u of units){
+    if(u.kind === 'image'){
+      const bytes = await u.file.arrayBuffer();
+      let img;
+      try{ img = u.file.type.includes('png') ? await outDoc.embedPng(bytes) : await outDoc.embedJpg(bytes); }
+      catch(e){ img = await outDoc.embedJpg(bytes); }
+      const page = outDoc.addPage([img.width, img.height]);
+      page.drawImage(img, { x:0, y:0, width: img.width, height: img.height });
+    } else {
+      const bytes = await u.file.arrayBuffer();
+      const srcDoc = await PDFDocument.load(bytes);
+      const copied = await outDoc.copyPages(srcDoc, srcDoc.getPageIndices());
+      copied.forEach(p => outDoc.addPage(p));
+    }
+  }
+  return await outDoc.save();
+}
+
+async function renderPreview(bytes){
+  const strip = document.getElementById('previewStrip');
+  strip.innerHTML = '';
+  const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+  const maxPages = Math.min(pdf.numPages, 12);
+  for(let i=1;i<=maxPages;i++){
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 0.4 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    strip.appendChild(canvas);
+  }
+  if(pdf.numPages > maxPages){
+    const note = document.createElement('div');
+    note.className = 'status';
+    note.style.alignSelf = 'center';
+    note.textContent = `+${pdf.numPages - maxPages} página(s) más`;
+    strip.appendChild(note);
+  }
+}
+
+async function sha256Hex(bytes){
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0,16);
+}
+
+// Uses only the first page (rendered as an image) to detect the date — keeps
+// the request small and fast even when the merged PDF has 100+ pages.
+async function detectDateAndSummary(){
+  const todayISO = mexicoCityTodayISO();
+  try{
+    const pdf = await pdfjsLib.getDocument({ data: mergedBytes.slice(0) }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1.3 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const base64 = dataUrl.split(',')[1];
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6', max_tokens: 1000,
+        messages: [{ role: 'user', content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
+          { type: 'text', text: 'Esta es la primera página de un lote de pedidos firmados escaneados. Responde ÚNICAMENTE con un objeto JSON, sin backticks ni texto adicional, con este formato exacto: {"date": "YYYY-MM-DD", "summary": "resumen breve en español, máximo 12 palabras"}. Si no encuentras una fecha clara, usa esta fecha: ' + todayISO + '.' }
+        ] }]
+      })
+    });
+    const data = await resp.json();
+    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    const clean = text.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+    detectedDate = /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : todayISO;
+    summaryText = parsed.summary || '';
+  }catch(e){ detectedDate = todayISO; summaryText = ''; }
+  document.getElementById('dateInput').value = detectedDate;
+  document.getElementById('summaryOut').textContent = summaryText || '—';
+  updateFilename();
+  document.getElementById('dateInput').oninput = () => { detectedDate = document.getElementById('dateInput').value; updateFilename(); checkDuplicate(); };
+}
+
+function updateFilename(suffix){
+  filenameFinal = `${detectedDate}_pedidos_firmados${suffix || ''}.pdf`;
+  document.getElementById('filenameOut').textContent = filenameFinal;
+  document.getElementById('checksumOut').textContent = checksumHex;
+}
+
+function checkDuplicate(){
+  duplicateEntry = filesIndex.find(h => h.date === detectedDate) || null;
+  const dw = document.getElementById('dupWarning');
+  if(duplicateEntry){
+    dw.innerHTML = `<div class="banner warn">
+      ⚠️ Ya existe un archivo guardado para el ${detectedDate} (${duplicateEntry.filename}).
+      Puedes reemplazarlo o guardar este como copia.
+    </div>`;
+  } else { dw.innerHTML = ''; }
+  updateFilename();
+}
+
+// ---------- finalize ----------
+async function finalizeAndSave(forceCopy){
+  if(duplicateEntry && !forceCopy){
+    const dw = document.getElementById('dupWarning');
+    dw.innerHTML = `<div class="banner warn">
+      ⚠️ Ya existe un archivo guardado para el ${detectedDate}. ¿Qué quieres hacer?
+      <div class="row" style="margin-top:0;">
+        <button class="danger" onclick="doFinalize(true)">Reemplazar</button>
+        <button class="secondary" onclick="doFinalize(false, true)">Guardar como copia</button>
+      </div>
+    </div>`;
+    return;
+  }
+  doFinalize(false);
+}
+
+async function doFinalize(overwrite, asCopy){
+  const cs = document.getElementById('confirmStatus');
+  let suffix = '';
+  if(asCopy){
+    let n = 2;
+    while(filesIndex.some(h => h.filename === `${detectedDate}_pedidos_firmados_v${n}.pdf`)) n++;
+    suffix = `_v${n}`;
+  }
+  updateFilename(suffix);
+
+  const sizeMB = (mergedBytes.length / 1024 / 1024).toFixed(1);
+  cs.innerHTML = `<span class="loader"></span>Subiendo a Drive (${sizeMB} MB)… esto puede tardar según tu conexión.`;
+
+  try{
+    if(overwrite && duplicateEntry){
+      await driveReplaceContent(duplicateEntry.id, mergedBytes);
+    } else {
+      await driveUploadNew(mergedBytes, filenameFinal);
+    }
+  }catch(e){
+    cs.innerHTML = '';
+    document.getElementById('dupWarning').innerHTML = `<div class="banner warn">⚠️ No se pudo subir a Drive: ${e.message}</div>`;
+    return;
+  }
+
+  await refreshIndex();
+  cs.textContent = '';
+  showDone();
+}
+
+function showDone(){
+  document.getElementById('cardConfirm').style.display = 'none';
+  document.getElementById('cardDone').style.display = 'block';
+  setStep(4);
+  document.getElementById('stampDate').textContent = detectedDate;
+  const msg = `Ya está disponible el archivo de pedidos firmados del ${detectedDate}`;
+  document.getElementById('waLink').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  checkReminder();
+}
+
+function backToUpload(){
+  document.getElementById('cardConfirm').style.display = 'none';
+  document.getElementById('cardUpload').style.display = 'block';
+  setStep(1);
+}
+
+function resetTool(){
+  units = []; mergedBytes = null; detectedDate = null; summaryText = ''; checksumHex = ''; filenameFinal = ''; duplicateEntry = null;
+  renderGrid();
+  document.getElementById('uploadStatus').textContent = '';
+  document.getElementById('cardDone').style.display = 'none';
+  document.getElementById('cardUpload').style.display = 'block';
+  setStep(1);
+}
+</script>
+</body>
+</html>
