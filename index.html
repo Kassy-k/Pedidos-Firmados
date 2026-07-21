@@ -127,6 +127,15 @@
       <button class="secondary" onclick="disconnectDrive()">Cerrar sesión de Drive</button>
       <button class="secondary" onclick="toggleSettings()">Cerrar</button>
     </div>
+    <div class="field" style="margin-top:20px;border-top:1px solid var(--rule);padding-top:16px;">
+      <label>Archivar un mes completo a su propia carpeta</label>
+      <div class="row" style="margin-top:6px;">
+        <input type="month" id="archiveMonthInput" style="padding:9px 10px;border:1px solid var(--rule);border-radius:var(--radius);font-family:ui-monospace,monospace;">
+        <button class="secondary" onclick="archiveMonth()">Mover archivos de ese mes</button>
+      </div>
+      <div class="status" id="archiveStatus"></div>
+      <div class="hint">Los archivos se suben sueltos día a día; usa esto al terminar el mes para juntarlos en una carpeta (ej. "JULIO 2026"). Requiere estar conectado a Drive.</div>
+    </div>
   </div>
 
   <div id="reminderBanner"></div>
@@ -184,7 +193,6 @@
           <div class="meta-line"><span class="k">Fecha detectada</span><span class="v"><input type="text" id="dateInput" style="font:inherit;border:none;text-align:right;width:120px;background:transparent;"></span></div>
           <div class="meta-line"><span class="k">Resumen</span><span class="v" id="summaryOut" style="font-weight:400;"></span></div>
           <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v"><input type="text" id="filenameInput" style="font:inherit;border:none;text-align:right;width:220px;background:transparent;"></span></div>
-          <div class="meta-line"><span class="k">Carpeta</span><span class="v" id="folderOut"></span></div>
           <div class="meta-line"><span class="k">Huella (checksum)</span><span class="v" id="checksumOut"></span></div>
           <div class="meta-line"><span class="k">Tamaño</span><span class="v" id="sizeOut"></span></div>
         </div>
@@ -353,18 +361,52 @@ async function writeIndexFile(indexArray){
   return await putRes.json();
 }
 
-async function driveGetOrCreateMonthFolder(yearMonth){
+const MONTH_NAMES_UPPER = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+async function driveGetOrCreateMonthFolder(displayName){
   const folders = await driveListMonthFolders();
-  const existing = folders.find(f => f.name === yearMonth);
+  const existing = folders.find(f => f.name === displayName);
   if(existing) return existing.id;
   const r = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ name: yearMonth, mimeType: 'application/vnd.google-apps.folder', parents: [ROOT_FOLDER_ID] })
+    body: JSON.stringify({ name: displayName, mimeType: 'application/vnd.google-apps.folder', parents: [ROOT_FOLDER_ID] })
   });
   if(!r.ok) throw new Error('No se pudo crear la carpeta del mes: ' + await r.text());
   const data = await r.json();
   return data.id;
+}
+
+async function driveMoveFile(fileId, newParentId){
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?addParents=${newParentId}&removeParents=${ROOT_FOLDER_ID}&fields=id,parents`, {
+    method: 'PATCH',
+    headers: authHeaders()
+  });
+  if(!r.ok) throw new Error(await r.text());
+}
+
+async function archiveMonth(){
+  const yearMonth = document.getElementById('archiveMonthInput').value; // 'YYYY-MM'
+  const status = document.getElementById('archiveStatus');
+  if(!yearMonth){ status.textContent = 'Elige un mes primero.'; return; }
+  if(!driveToken){ status.textContent = 'Conecta Google Drive primero (en la pestaña de Subir pedido).'; return; }
+
+  const [y, m] = yearMonth.split('-');
+  const displayName = `${MONTH_NAMES_UPPER[parseInt(m,10)-1]} ${y}`;
+  const toMove = filesIndex.filter(e => e.date.slice(0,7) === yearMonth);
+  if(!toMove.length){ status.textContent = `No hay archivos de ${displayName} en la carpeta principal.`; return; }
+
+  status.innerHTML = `<span class="loader"></span>Moviendo ${toMove.length} archivo(s) a "${displayName}"…`;
+  try{
+    const folderId = await driveGetOrCreateMonthFolder(displayName);
+    for(let i=0;i<toMove.length;i++){
+      status.innerHTML = `<span class="loader"></span>Moviendo ${i+1} de ${toMove.length} (${displayName})…`;
+      await driveMoveFile(toMove[i].id, folderId);
+    }
+    status.textContent = `Listo: ${toMove.length} archivo(s) movidos a "${displayName}".`;
+  }catch(e){
+    status.textContent = 'Ocurrió un error moviendo archivos: ' + e.message;
+  }
 }
 
 // driveListFiles reemplazada por fetchIndexFile/writeIndexFile (ver arriba)
@@ -804,7 +846,6 @@ function updateFilename(suffix){
   filenameFinal = `${detectedDate}_pedidos_firmados${suffix || ''}.pdf`;
   const input = document.getElementById('filenameInput');
   if(input && (!input.dataset.touched || suffix)) input.value = filenameFinal;
-  document.getElementById('folderOut').textContent = detectedDate ? detectedDate.slice(0,7) : '';
 }
 
 function checkDuplicate(){
@@ -847,14 +888,12 @@ async function doFinalize(overwrite, asCopy){
   cs.innerHTML = `<span class="loader"></span>Subiendo a Drive (${sizeMB} MB)… esto puede tardar según tu conexión.`;
 
   try{
-    const yearMonth = detectedDate.slice(0,7);
-    const folderId = await driveGetOrCreateMonthFolder(yearMonth);
     let uploadedId = duplicateEntry ? duplicateEntry.id : null;
     if(overwrite && duplicateEntry){
       const res = await driveReplaceContent(duplicateEntry.id, mergedBytes, filenameFinal, detectedDate);
       uploadedId = res.id || duplicateEntry.id;
     } else {
-      const res = await driveUploadNew(mergedBytes, filenameFinal, folderId, detectedDate);
+      const res = await driveUploadNew(mergedBytes, filenameFinal, ROOT_FOLDER_ID, detectedDate);
       uploadedId = res.id;
     }
 
