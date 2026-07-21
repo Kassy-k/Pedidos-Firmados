@@ -131,17 +131,7 @@
 
   <div id="reminderBanner"></div>
 
-  <!-- CONNECT GATE -->
-  <div id="connectGate" class="card">
-    <div class="connect-box">
-      <div class="big">Conecta tu cuenta de Google</div>
-      <div class="small">Los archivos se guardan y se ven aquí mismo — nunca necesitas abrir Drive directamente. Solo se usa tu inicio de sesión para guardar los datos de forma segura y permanente.</div>
-      <button onclick="connectDrive()">Conectar Google Drive</button>
-      <div class="status" id="connectStatus"></div>
-    </div>
-  </div>
-
-  <div id="appBody" style="display:none;">
+  <div id="appBody">
     <div class="tabs">
       <div class="tab active" id="tabFiles" onclick="showTab('files')">Archivos guardados</div>
       <div class="tab" id="tabUpload" onclick="showTab('upload')">+ Subir pedido</div>
@@ -154,6 +144,16 @@
     </div>
 
     <div id="viewUpload" style="display:none;">
+      <div class="card" id="cardConnect">
+        <div class="connect-box">
+          <div class="big">Conecta tu cuenta de Google para subir</div>
+          <div class="small">Ver y descargar archivos no requiere conexión — esto solo es necesario para guardar un pedido nuevo.</div>
+          <button onclick="connectDrive()">Conectar Google Drive</button>
+          <div class="status" id="connectStatus"></div>
+        </div>
+      </div>
+
+      <div id="uploadWizard" style="display:none;">
       <div class="steps">
         <div class="step" id="step-1">1 · Cargar</div>
         <div class="step" id="step-2">2 · Ordenar</div>
@@ -209,6 +209,7 @@
           </div>
         </div>
       </div>
+      </div>
     </div>
   </div>
 
@@ -232,6 +233,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 const { PDFDocument } = PDFLib;
 
 const CLIENT_ID = '1053576077507-e2n8l9vdglrrlhb6u60lf42r8hp1gldt.apps.googleusercontent.com';
+const API_KEY = 'AIzaSyBbBBBd_StZCWNnLwkAmMS8xqHXyNsld9s';
 const ROOT_FOLDER_ID = '1rmGYZlDEZFGJbGotVxQR5v0EGU6B2g46';
 const SCOPES = 'https://www.googleapis.com/auth/drive';
 const PREVIEW_PAGE_BATCH = 20;
@@ -295,10 +297,9 @@ async function onTokenResponse(resp){
     const info = await r.json();
     userEmail = info.email || '';
   }catch(e){ userEmail = ''; }
-  document.getElementById('connectGate').style.display = 'none';
-  document.getElementById('appBody').style.display = 'block';
   document.getElementById('whoBadge').innerHTML = `<span class="who-badge"><span class="dot"></span>${userEmail || 'Conectado'}</span>`;
-  await init();
+  document.getElementById('cardConnect').style.display = 'none';
+  document.getElementById('uploadWizard').style.display = 'block';
 }
 
 function disconnectDrive(){
@@ -306,8 +307,9 @@ function disconnectDrive(){
     google.accounts.oauth2.revoke(driveToken, () => {});
   }
   driveToken = null; userEmail = '';
-  document.getElementById('appBody').style.display = 'none';
-  document.getElementById('connectGate').style.display = 'block';
+  document.getElementById('whoBadge').innerHTML = '';
+  document.getElementById('cardConnect').style.display = 'block';
+  document.getElementById('uploadWizard').style.display = 'none';
   toggleSettings();
 }
 
@@ -318,8 +320,8 @@ function authHeaders(extra){
 // ---------- Drive REST helpers ----------
 async function driveListFiles(){
   const q = encodeURIComponent(`'${ROOT_FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'`);
-  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime,md5Checksum)&orderBy=name desc&pageSize=1000`;
-  const r = await fetch(url, { headers: authHeaders() });
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime,md5Checksum)&orderBy=name desc&pageSize=1000&key=${API_KEY}`;
+  const r = await fetch(url);
   if(!r.ok) throw new Error('No se pudo listar archivos de Drive');
   const data = await r.json();
   return data.files || [];
@@ -361,7 +363,7 @@ async function driveReplaceContent(fileId, bytes){
 }
 
 async function driveDownloadBytes(fileId){
-  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: authHeaders() });
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${API_KEY}`);
   if(!r.ok) throw new Error('No se pudo descargar el archivo de Drive');
   const buf = await r.arrayBuffer();
   return new Uint8Array(buf);
@@ -375,6 +377,7 @@ async function init(){
   await refreshIndex();
   await checkReminder();
 }
+init();
 initGoogleAuth();
 
 function toggleSettings(){
@@ -502,6 +505,10 @@ function showTab(tab){
   document.getElementById('tabFiles').classList.toggle('active', tab === 'files');
   document.getElementById('tabUpload').classList.toggle('active', tab === 'upload');
   if(tab === 'files') refreshIndex();
+  if(tab === 'upload'){
+    document.getElementById('cardConnect').style.display = driveToken ? 'none' : 'block';
+    document.getElementById('uploadWizard').style.display = driveToken ? 'block' : 'none';
+  }
 }
 function setStep(n){
   for(let i=1;i<=4;i++){
