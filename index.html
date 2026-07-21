@@ -183,7 +183,8 @@
         <div id="metaBlock" style="display:none;">
           <div class="meta-line"><span class="k">Fecha detectada</span><span class="v"><input type="text" id="dateInput" style="font:inherit;border:none;text-align:right;width:120px;background:transparent;"></span></div>
           <div class="meta-line"><span class="k">Resumen</span><span class="v" id="summaryOut" style="font-weight:400;"></span></div>
-          <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v" id="filenameOut"></span></div>
+          <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v"><input type="text" id="filenameInput" style="font:inherit;border:none;text-align:right;width:220px;background:transparent;"></span></div>
+          <div class="meta-line"><span class="k">Carpeta</span><span class="v" id="folderOut"></span></div>
           <div class="meta-line"><span class="k">Huella (checksum)</span><span class="v" id="checksumOut"></span></div>
           <div class="meta-line"><span class="k">Tamaño</span><span class="v" id="sizeOut"></span></div>
         </div>
@@ -318,17 +319,43 @@ function authHeaders(extra){
 }
 
 // ---------- Drive REST helpers ----------
+async function driveListMonthFolders(){
+  const q = encodeURIComponent(`'${ROOT_FOLDER_ID}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1000&key=${API_KEY}`;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('No se pudo listar las carpetas de mes');
+  const data = await r.json();
+  return data.files || [];
+}
+
+async function driveGetOrCreateMonthFolder(yearMonth){
+  const folders = await driveListMonthFolders();
+  const existing = folders.find(f => f.name === yearMonth);
+  if(existing) return existing.id;
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ name: yearMonth, mimeType: 'application/vnd.google-apps.folder', parents: [ROOT_FOLDER_ID] })
+  });
+  if(!r.ok) throw new Error('No se pudo crear la carpeta del mes: ' + await r.text());
+  const data = await r.json();
+  return data.id;
+}
+
 async function driveListFiles(){
-  const q = encodeURIComponent(`'${ROOT_FOLDER_ID}' in parents and trashed=false and mimeType='application/pdf'`);
-  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime,md5Checksum)&orderBy=name desc&pageSize=1000&key=${API_KEY}`;
+  const folders = await driveListMonthFolders();
+  const parentIds = [ROOT_FOLDER_ID, ...folders.map(f => f.id)];
+  const clause = parentIds.map(id => `'${id}' in parents`).join(' or ');
+  const q = encodeURIComponent(`(${clause}) and trashed=false and mimeType='application/pdf'`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,size,createdTime,md5Checksum,properties)&orderBy=name desc&pageSize=1000&key=${API_KEY}`;
   const r = await fetch(url);
   if(!r.ok) throw new Error('No se pudo listar archivos de Drive');
   const data = await r.json();
   return data.files || [];
 }
 
-async function driveUploadNew(bytes, filename){
-  const metadata = { name: filename, parents: [ROOT_FOLDER_ID] };
+async function driveUploadNew(bytes, filename, folderId, dateStr){
+  const metadata = { name: filename, parents: [folderId], properties: { orderDate: dateStr } };
   const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,createdTime,md5Checksum', {
     method: 'POST',
     headers: authHeaders({
@@ -345,7 +372,8 @@ async function driveUploadNew(bytes, filename){
   return await putRes.json();
 }
 
-async function driveReplaceContent(fileId, bytes){
+async function driveReplaceContent(fileId, bytes, filename, dateStr){
+  const metadata = { name: filename, properties: { orderDate: dateStr } };
   const initRes = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=resumable&fields=id,name,size,createdTime,md5Checksum`, {
     method: 'PATCH',
     headers: authHeaders({
@@ -353,7 +381,7 @@ async function driveReplaceContent(fileId, bytes){
       'X-Upload-Content-Type': 'application/pdf',
       'X-Upload-Content-Length': String(bytes.length)
     }),
-    body: JSON.stringify({})
+    body: JSON.stringify(metadata)
   });
   if(!initRes.ok) throw new Error('No se pudo iniciar el reemplazo: ' + await initRes.text());
   const uploadUrl = initRes.headers.get('Location');
@@ -416,7 +444,8 @@ async function refreshIndex(){
   try{
     const files = await driveListFiles();
     filesIndex = files.map(f => ({
-      id: f.id, filename: f.name, date: parseDateFromFilename(f.name),
+      id: f.id, filename: f.name,
+      date: (f.properties && f.properties.orderDate) || parseDateFromFilename(f.name),
       sizeKB: f.size ? Math.round(parseInt(f.size,10)/1024) : 0,
       timestamp: f.createdTime ? new Date(f.createdTime).getTime() : 0,
       checksum: f.md5Checksum || ''
@@ -434,19 +463,30 @@ function renderFilesList(){
     return;
   }
   const sorted = [...filesIndex].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
-  list.innerHTML = sorted.map(e => `
-    <div class="file-row">
-      <div class="date-badge">${e.date}</div>
-      <div class="info">
-        <div class="sm">${e.filename}</div>
-        <div class="fn">${e.sizeKB} KB${e.checksum ? ' · md5 ' + e.checksum.slice(0,10) : ''}</div>
-      </div>
-      <div class="acts">
-        <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
-        <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
-      </div>
-    </div>
-  `).join('');
+  const monthNames = {'01':'enero','02':'febrero','03':'marzo','04':'abril','05':'mayo','06':'junio','07':'julio','08':'agosto','09':'septiembre','10':'octubre','11':'noviembre','12':'diciembre'};
+  let html = '';
+  let lastMonth = null;
+  for(const e of sorted){
+    const ym = e.date.slice(0,7);
+    if(ym !== lastMonth){
+      const [y,m] = ym.split('-');
+      html += `<div style="font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);padding:14px 4px 4px;">${monthNames[m] || m} ${y}</div>`;
+      lastMonth = ym;
+    }
+    html += `
+      <div class="file-row">
+        <div class="date-badge">${e.date}</div>
+        <div class="info">
+          <div class="sm">${e.filename}</div>
+          <div class="fn">${e.sizeKB} KB${e.checksum ? ' · md5 ' + e.checksum.slice(0,10) : ''}</div>
+        </div>
+        <div class="acts">
+          <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
+          <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
+        </div>
+      </div>`;
+  }
+  list.innerHTML = html;
 }
 
 async function viewEntry(fileId){
@@ -648,6 +688,7 @@ async function goToPreviewStep(){
 
   await renderPreview(mergedBytes);
   checksumHex = await sha256Hex(mergedBytes);
+  document.getElementById('checksumOut').textContent = checksumHex;
 
   cs.innerHTML = '<span class="loader"></span>Detectando la fecha del documento…';
   await detectDateAndSummary();
@@ -744,12 +785,14 @@ async function detectDateAndSummary(){
   document.getElementById('summaryOut').textContent = summaryText || '—';
   updateFilename();
   document.getElementById('dateInput').oninput = () => { detectedDate = document.getElementById('dateInput').value; updateFilename(); checkDuplicate(); };
+  document.getElementById('filenameInput').oninput = (e) => { e.target.dataset.touched = '1'; };
 }
 
 function updateFilename(suffix){
   filenameFinal = `${detectedDate}_pedidos_firmados${suffix || ''}.pdf`;
-  document.getElementById('filenameOut').textContent = filenameFinal;
-  document.getElementById('checksumOut').textContent = checksumHex;
+  const input = document.getElementById('filenameInput');
+  if(input && (!input.dataset.touched || suffix)) input.value = filenameFinal;
+  document.getElementById('folderOut').textContent = detectedDate ? detectedDate.slice(0,7) : '';
 }
 
 function checkDuplicate(){
@@ -758,10 +801,9 @@ function checkDuplicate(){
   if(duplicateEntry){
     dw.innerHTML = `<div class="banner warn">
       ⚠️ Ya existe un archivo guardado para el ${detectedDate} (${duplicateEntry.filename}).
-      Puedes reemplazarlo o guardar este como copia.
+      Puedes reemplazarlo o guardar este como archivo aparte.
     </div>`;
   } else { dw.innerHTML = ''; }
-  updateFilename();
 }
 
 // ---------- finalize ----------
@@ -772,7 +814,7 @@ async function finalizeAndSave(forceCopy){
       ⚠️ Ya existe un archivo guardado para el ${detectedDate}. ¿Qué quieres hacer?
       <div class="row" style="margin-top:0;">
         <button class="danger" onclick="doFinalize(true)">Reemplazar</button>
-        <button class="secondary" onclick="doFinalize(false, true)">Guardar como copia</button>
+        <button class="secondary" onclick="doFinalize(false, true)">Guardar como archivo aparte</button>
       </div>
     </div>`;
     return;
@@ -782,22 +824,23 @@ async function finalizeAndSave(forceCopy){
 
 async function doFinalize(overwrite, asCopy){
   const cs = document.getElementById('confirmStatus');
-  let suffix = '';
-  if(asCopy){
-    let n = 2;
-    while(filesIndex.some(h => h.filename === `${detectedDate}_pedidos_firmados_v${n}.pdf`)) n++;
-    suffix = `_v${n}`;
+  let name = (document.getElementById('filenameInput').value || '').trim() || filenameFinal;
+  if(!/\.pdf$/i.test(name)) name += '.pdf';
+  if(asCopy && name === filenameFinal){
+    name = name.replace(/\.pdf$/i, '') + ' (2).pdf';
   }
-  updateFilename(suffix);
+  filenameFinal = name;
 
   const sizeMB = (mergedBytes.length / 1024 / 1024).toFixed(1);
   cs.innerHTML = `<span class="loader"></span>Subiendo a Drive (${sizeMB} MB)… esto puede tardar según tu conexión.`;
 
   try{
+    const yearMonth = detectedDate.slice(0,7);
+    const folderId = await driveGetOrCreateMonthFolder(yearMonth);
     if(overwrite && duplicateEntry){
-      await driveReplaceContent(duplicateEntry.id, mergedBytes);
+      await driveReplaceContent(duplicateEntry.id, mergedBytes, filenameFinal, detectedDate);
     } else {
-      await driveUploadNew(mergedBytes, filenameFinal);
+      await driveUploadNew(mergedBytes, filenameFinal, folderId, detectedDate);
     }
   }catch(e){
     cs.innerHTML = '';
