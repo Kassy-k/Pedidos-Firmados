@@ -313,6 +313,7 @@ async function onTokenResponse(resp){
   document.getElementById('whoBadge').innerHTML = `<span class="who-badge"><span class="dot"></span>${userEmail || 'Conectado'}</span>`;
   document.getElementById('cardConnect').style.display = 'none';
   document.getElementById('uploadWizard').style.display = 'block';
+  renderFilesList();
 }
 
 function disconnectDrive(){
@@ -554,6 +555,7 @@ function renderFilesList(){
         <div class="acts">
           <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
           <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
+          ${driveToken ? `<button class="small danger" title="Borrar" onclick="deleteEntry('${e.id}','${e.filename.replace(/'/g,"")}')">✕</button>` : ''}
         </div>
       </div>`;
   }
@@ -597,9 +599,27 @@ async function loadMoreModalPages(){
 
 function closeModal(){ document.getElementById('modalOverlay').classList.remove('open'); modalPdfDoc = null; }
 
+async function driveDeleteFile(fileId){
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, { method: 'DELETE', headers: authHeaders() });
+  if(!r.ok && r.status !== 204) throw new Error(await r.text());
+}
+
+async function deleteEntry(fileId, filename){
+  if(!driveToken) return;
+  if(!confirm(`¿Borrar "${filename}" de forma permanente? Esto no se puede deshacer.`)) return;
+  try{
+    await driveDeleteFile(fileId);
+    let idx = await fetchIndexFile();
+    idx = idx.filter(e => e.id !== fileId);
+    await writeIndexFile(idx);
+    await refreshIndex();
+  }catch(e){
+    alert('No se pudo borrar: ' + e.message);
+  }
+}
+
 async function downloadEntry(fileId, filename){
   try{
-    const bytes = await driveDownloadBytes(fileId);
     const blob = new Blob([bytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
