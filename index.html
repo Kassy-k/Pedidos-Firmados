@@ -148,6 +148,9 @@
 
     <div id="viewFiles">
       <div class="card">
+        <div class="field" style="margin-bottom:12px;">
+          <input type="text" id="searchInput" placeholder="Buscar por fecha (2026-07, 20 julio) o nombre de archivo…" oninput="renderFilesList()" style="width:100%;padding:10px 12px;border:1px solid var(--rule);border-radius:var(--radius);font-family:ui-monospace,monospace;font-size:13px;">
+        </div>
         <div id="filesList"></div>
       </div>
     </div>
@@ -516,8 +519,22 @@ function renderFilesList(){
     list.innerHTML = `<div class="empty-state"><div class="big">Todavía no hay archivos guardados</div>Sube el primer pedido firmado desde la pestaña de arriba.</div>`;
     return;
   }
-  const sorted = [...filesIndex].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
   const monthNames = {'01':'enero','02':'febrero','03':'marzo','04':'abril','05':'mayo','06':'junio','07':'julio','08':'agosto','09':'septiembre','10':'octubre','11':'noviembre','12':'diciembre'};
+  const rawQuery = (document.getElementById('searchInput') && document.getElementById('searchInput').value || '').trim().toLowerCase();
+  let filtered = filesIndex;
+  if(rawQuery){
+    filtered = filesIndex.filter(e => {
+      const [y,m] = e.date.split('-');
+      const monthName = monthNames[m] || '';
+      const haystack = `${e.date} ${monthName} ${y} ${e.filename}`.toLowerCase();
+      return rawQuery.split(/\s+/).every(term => haystack.includes(term));
+    });
+  }
+  if(!filtered.length){
+    list.innerHTML = `<div class="empty-state">No se encontró ningún archivo para "${rawQuery}".</div>`;
+    return;
+  }
+  const sorted = [...filtered].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
   let html = '';
   let lastMonth = null;
   for(const e of sorted){
