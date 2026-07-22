@@ -96,6 +96,18 @@
   .modal-box .modal-head h3{margin:0;font-size:15px;font-family: ui-monospace, monospace;}
   .modal-box .close{background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;padding:0;}
   .modal-pages canvas{width:100%;border:1px solid var(--rule);margin-bottom:10px;border-radius:2px;}
+  .month-folder{border:1px solid var(--rule);border-radius:var(--radius);margin:10px 0;overflow:hidden;}
+  .month-folder summary{
+    list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:10px;
+    background:#f7f6f2;font-family:ui-monospace,monospace;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink);
+  }
+  .month-folder summary::-webkit-details-marker{display:none;}
+  .month-folder summary .icon{font-size:14px;}
+  .month-folder summary .count{margin-left:auto;color:var(--muted);text-transform:none;letter-spacing:0;}
+  .month-folder[open] summary .icon::before{content:"📂";}
+  .month-folder:not([open]) summary .icon::before{content:"📁";}
+  .month-current{border-color:var(--brass);}
+  .month-current summary{background:var(--brass-dim);}
   .connect-box{text-align:center;padding:50px 20px;}
   .connect-box .big{font-size:16px;font-weight:700;margin-bottom:8px;}
   .connect-box .small{font-size:13px;color:var(--muted);margin-bottom:20px;max-width:420px;margin-left:auto;margin-right:auto;}
@@ -536,17 +548,17 @@ function renderFilesList(){
     list.innerHTML = `<div class="empty-state">No se encontró ningún archivo para "${rawQuery}".</div>`;
     return;
   }
-  const sorted = [...filtered].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
-  let html = '';
-  let lastMonth = null;
-  for(const e of sorted){
+
+  const currentYM = mexicoCityTodayISO().slice(0,7);
+  const groups = {};
+  for(const e of filtered){
     const ym = e.date.slice(0,7);
-    if(ym !== lastMonth){
-      const [y,m] = ym.split('-');
-      html += `<div style="font-family:ui-monospace,monospace;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);padding:14px 4px 4px;">${monthNames[m] || m} ${y}</div>`;
-      lastMonth = ym;
-    }
-    html += `
+    (groups[ym] = groups[ym] || []).push(e);
+  }
+  const orderedYMs = Object.keys(groups).sort((a,b) => b.localeCompare(a));
+
+  function rowHtml(e){
+    return `
       <div class="file-row">
         <div class="date-badge">${e.date}</div>
         <div class="info">
@@ -559,6 +571,17 @@ function renderFilesList(){
           ${driveToken ? `<button class="small danger" title="Borrar" onclick="deleteEntry('${e.id}','${e.filename.replace(/'/g,"")}')">✕</button>` : ''}
         </div>
       </div>`;
+  }
+
+  let html = '';
+  for(const ym of orderedYMs){
+    const [y,m] = ym.split('-');
+    const entries = groups[ym].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp - a.timestamp);
+    const isCurrent = ym === currentYM || !!rawQuery;
+    html += `<details class="month-folder${ym === currentYM ? ' month-current' : ''}" ${isCurrent ? 'open' : ''}>
+      <summary><span class="icon"></span>${monthNames[m] || m} ${y}<span class="count">${entries.length} archivo(s)</span></summary>
+      <div style="padding:0 14px;">${entries.map(rowHtml).join('')}</div>
+    </details>`;
   }
   list.innerHTML = html;
 }
@@ -992,27 +1015,3 @@ function resetTool(){
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
