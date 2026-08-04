@@ -980,7 +980,15 @@ async function detectDateAndSummary(){
   document.getElementById('summaryOut').textContent = summaryText || '—';
   updateFilename();
   document.getElementById('dateInput').oninput = () => { detectedDate = document.getElementById('dateInput').value; updateFilename(); checkDuplicate(); };
-  document.getElementById('filenameInput').oninput = (e) => { e.target.dataset.touched = '1'; };
+  document.getElementById('filenameInput').oninput = (e) => {
+    e.target.dataset.touched = '1';
+    const fromName = parseDateFromFilename(e.target.value);
+    if(fromName){
+      detectedDate = fromName;
+      document.getElementById('dateInput').value = fromName;
+      checkDuplicate();
+    }
+  };
 }
 
 function updateFilename(suffix){
