@@ -148,6 +148,14 @@
       <div class="status" id="archiveStatus"></div>
       <div class="hint">Los archivos se suben sueltos día a día; usa esto al terminar el mes para juntarlos en una carpeta (ej. "JULIO 2026"). Requiere estar conectado a Drive.</div>
     </div>
+    <div class="field" style="margin-top:20px;border-top:1px solid var(--rule);padding-top:16px;">
+      <label>Corregir fechas usando el nombre del archivo</label>
+      <div class="row" style="margin-top:6px;">
+        <button class="secondary" onclick="repairIndexDates()">Corregir ahora</button>
+      </div>
+      <div class="status" id="repairStatus"></div>
+      <div class="hint">Si algún archivo quedó agrupado en el mes equivocado (la fecha detectada por IA no coincidió con el nombre), esto la corrige usando la fecha que aparece en el nombre del archivo. Requiere estar conectado a Drive.</div>
+    </div>
   </div>
 
   <div id="reminderBanner"></div>
@@ -402,6 +410,35 @@ async function driveMoveFile(fileId, newParentId){
   if(!r.ok) throw new Error(await r.text());
 }
 
+async function repairIndexDates(){
+  const status = document.getElementById('repairStatus');
+  if(!driveToken){ status.textContent = 'Conecta Google Drive primero (en la pestaña de Subir pedido).'; return; }
+  status.innerHTML = '<span class="loader"></span>Revisando fechas…';
+  try{
+    const idx = await fetchIndexFile();
+    let fixed = 0;
+    for(const e of idx){
+      const fromName = parseDateFromFilename(e.name);
+      if(fromName && fromName !== e.date){
+        e.date = fromName;
+        fixed++;
+      }
+    }
+    if(fixed > 0){
+      await writeIndexFile(idx);
+      await refreshIndex();
+    }
+    status.textContent = fixed > 0 ? `Listo: se corrigieron ${fixed} archivo(s).` : 'Todo estaba correcto, no había nada que corregir.';
+  }catch(e){
+    if(isAuthError(e.message)){
+      handleAuthExpired();
+      status.textContent = 'Tu sesión de Google expiró. Conéctate de nuevo e inténtalo otra vez.';
+    } else {
+      status.textContent = 'Ocurrió un error: ' + e.message;
+    }
+  }
+}
+
 async function archiveMonth(){
   const yearMonth = document.getElementById('archiveMonthInput').value; // 'YYYY-MM'
   const status = document.getElementById('archiveStatus');
@@ -422,7 +459,12 @@ async function archiveMonth(){
     }
     status.textContent = `Listo: ${toMove.length} archivo(s) movidos a "${displayName}".`;
   }catch(e){
-    status.textContent = 'Ocurrió un error moviendo archivos: ' + e.message;
+    if(isAuthError(e.message)){
+      handleAuthExpired();
+      status.textContent = 'Tu sesión de Google expiró. Conéctate de nuevo desde "+ Subir pedido" e intenta archivar otra vez.';
+    } else {
+      status.textContent = 'Ocurrió un error moviendo archivos: ' + e.message;
+    }
   }
 }
 
@@ -640,6 +682,27 @@ async function driveDeleteFile(fileId){
   if(!r.ok && r.status !== 204) throw new Error(await r.text());
 }
 
+function isAuthError(message){
+  return /401|invalid authentication|UNAUTHENTICATED/i.test(message || '');
+}
+
+const SPANISH_MONTHS = {'enero':'01','febrero':'02','marzo':'03','abril':'04','mayo':'05','junio':'06','julio':'07','agosto':'08','septiembre':'09','octubre':'10','noviembre':'11','diciembre':'12'};
+function parseDateFromFilename(name){
+  const m = (name || '').match(/(\d{1,2})\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+(\d{4})/);
+  if(!m) return null;
+  const [, day, monthName, year] = m;
+  const mm = SPANISH_MONTHS[monthName.toLowerCase()];
+  if(!mm) return null;
+  return `${year}-${mm}-${String(day).padStart(2,'0')}`;
+}
+function handleAuthExpired(){
+  driveToken = null; userEmail = '';
+  document.getElementById('whoBadge').innerHTML = '';
+  document.getElementById('cardConnect').style.display = 'block';
+  document.getElementById('uploadWizard').style.display = 'none';
+  renderFilesList();
+}
+
 async function deleteEntry(fileId, filename){
   if(!driveToken) return;
   if(!confirm(`¿Borrar "${filename}" de forma permanente? Esto no se puede deshacer.`)) return;
@@ -650,7 +713,12 @@ async function deleteEntry(fileId, filename){
     await writeIndexFile(idx);
     await refreshIndex();
   }catch(e){
-    alert('No se pudo borrar: ' + e.message);
+    if(isAuthError(e.message)){
+      handleAuthExpired();
+      alert('Tu sesión de Google expiró. Conéctate de nuevo desde "+ Subir pedido" e intenta borrar otra vez.');
+    } else {
+      alert('No se pudo borrar: ' + e.message);
+    }
   }
 }
 
@@ -957,6 +1025,11 @@ async function doFinalize(overwrite, asCopy){
   }
   filenameFinal = name;
 
+  const filenameDate = parseDateFromFilename(filenameFinal);
+  if(filenameDate && filenameDate !== detectedDate){
+    detectedDate = filenameDate;
+  }
+
   const sizeMB = (mergedBytes.length / 1024 / 1024).toFixed(1);
   cs.innerHTML = `<span class="loader"></span>Subiendo a Drive (${sizeMB} MB)… esto puede tardar según tu conexión.`;
 
@@ -979,7 +1052,12 @@ async function doFinalize(overwrite, asCopy){
     await writeIndexFile(idx);
   }catch(e){
     cs.innerHTML = '';
-    document.getElementById('dupWarning').innerHTML = `<div class="banner warn">⚠️ No se pudo subir a Drive: ${e.message}</div>`;
+    if(isAuthError(e.message)){
+      handleAuthExpired();
+      document.getElementById('dupWarning').innerHTML = `<div class="banner warn">⚠️ Tu sesión de Google expiró. Conéctate de nuevo y vuelve a intentar guardar.</div>`;
+    } else {
+      document.getElementById('dupWarning').innerHTML = `<div class="banner warn">⚠️ No se pudo subir a Drive: ${e.message}</div>`;
+    }
     return;
   }
 
