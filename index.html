@@ -14,10 +14,10 @@
   :root{
     --bg: #131313; --paper: #1c1c1c; --rule: #333333; --rule-soft: #262626;
     --ink: #f2f2f0; --ink-soft: #c9c9c6; --muted: #8f8f8c;
-    --accent: #e8791f; --accent-hover: #ff8c33; --accent-dim: rgba(232,121,31,.15); --accent-line: rgba(232,121,31,.45);
-    --mint: #e8791f; --mint-dim: rgba(232,121,31,.15); --mint-line: rgba(232,121,31,.45);
+    --accent: #c9a227; --accent-hover: #dab53f; --accent-dim: rgba(201,162,39,.15); --accent-line: rgba(201,162,39,.45);
+    --mint: #c9a227; --mint-dim: rgba(201,162,39,.15); --mint-line: rgba(201,162,39,.45);
     --coral: #e0574f; --coral-dim: rgba(224,87,79,.16); --coral-line: rgba(224,87,79,.45);
-    --peach: #e8791f; --peach-dim: rgba(232,121,31,.16); --peach-line: rgba(232,121,31,.45);
+    --peach: #c9a227; --peach-dim: rgba(201,162,39,.16); --peach-line: rgba(201,162,39,.45);
     --shadow-1: 0 2px 8px rgba(0,0,0,.35);
     --shadow-2: 0 16px 40px -12px rgba(0,0,0,.55);
     --radius: 12px; --radius-md: 9px; --radius-sm: 7px;
@@ -27,8 +27,8 @@
   ::selection{background:var(--accent-dim);color:var(--ink);}
   body{
     margin:0;
-    background: var(--bg);
-    color:var(--ink); min-height:100vh; padding:36px 18px 90px;
+    background: url('kassel-logo.png') no-repeat top center / 190px auto, var(--bg);
+    color:var(--ink); min-height:100vh; padding:220px 18px 90px;
     -webkit-font-smoothing:antialiased;
   }
   .wrap{max-width:760px;margin:0 auto;}
@@ -198,7 +198,7 @@
   .who-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);}
 
   @media (max-width:480px){
-    body{padding:22px 12px 70px;}
+    body{padding:150px 12px 70px;background-size:130px auto;}
     .card{padding:18px;}
     .brand h1{font-size:14px;}
     .brand{flex-wrap:wrap;}
@@ -213,10 +213,9 @@
 <div class="wrap">
 
   <div class="brand">
-    <div class="seal">PF</div>
     <div>
       <h1>Pedidos Firmados</h1>
-      <div class="sub">Kassel Home &amp; Living</div>
+      <div class="sub">Archivo digital</div>
     </div>
     <div class="brand-right">
       <span id="whoBadge"></span>
