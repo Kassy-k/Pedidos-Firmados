@@ -12,14 +12,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #131313; --paper: #1c1c1c; --rule: #333333; --rule-soft: #262626;
-    --ink: #f2f2f0; --ink-soft: #c9c9c6; --muted: #8f8f8c;
-    --accent: #c9a227; --accent-hover: #dab53f; --accent-dim: rgba(201,162,39,.15); --accent-line: rgba(201,162,39,.45);
-    --mint: #c9a227; --mint-dim: rgba(201,162,39,.15); --mint-line: rgba(201,162,39,.45);
-    --coral: #e0574f; --coral-dim: rgba(224,87,79,.16); --coral-line: rgba(224,87,79,.45);
-    --peach: #c9a227; --peach-dim: rgba(201,162,39,.16); --peach-line: rgba(201,162,39,.45);
-    --shadow-1: 0 2px 8px rgba(0,0,0,.35);
-    --shadow-2: 0 16px 40px -12px rgba(0,0,0,.55);
+    --bg: #48484f; --paper: #59595f; --rule: #6d6d75; --rule-soft: #626269;
+    --ink: #f7f7f6; --ink-soft: #dcdcda; --muted: #bcbcba;
+    --accent: #c9a227; --accent-hover: #dab53f; --accent-dim: rgba(201,162,39,.20); --accent-line: rgba(201,162,39,.55);
+    --mint: #c9a227; --mint-dim: rgba(201,162,39,.20); --mint-line: rgba(201,162,39,.55);
+    --coral: #e0574f; --coral-dim: rgba(224,87,79,.22); --coral-line: rgba(224,87,79,.55);
+    --peach: #c9a227; --peach-dim: rgba(201,162,39,.22); --peach-line: rgba(201,162,39,.55);
+    --shadow-1: 0 2px 8px rgba(0,0,0,.22);
+    --shadow-2: 0 16px 40px -12px rgba(0,0,0,.4);
     --radius: 12px; --radius-md: 9px; --radius-sm: 7px;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
@@ -354,9 +354,9 @@
         <div id="confirmStatus" class="status"></div>
         <div class="preview-strip" id="previewStrip"></div>
         <div id="metaBlock" style="display:none;">
-          <div class="meta-line"><span class="k">Fecha detectada</span><span class="v"><input type="text" id="dateInput" style="font:inherit;border:none;text-align:right;width:120px;background:transparent;"></span></div>
+          <div class="meta-line"><span class="k">Fecha detectada</span><span class="v"><input type="text" id="dateInput" style="font:inherit;border:none;text-align:right;width:120px;background:transparent;color:var(--ink);"></span></div>
           <div class="meta-line"><span class="k">Resumen</span><span class="v" id="summaryOut" style="font-weight:400;"></span></div>
-          <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v"><input type="text" id="filenameInput" style="font:inherit;border:none;text-align:right;width:220px;background:transparent;"></span></div>
+          <div class="meta-line"><span class="k">Nombre de archivo</span><span class="v"><input type="text" id="filenameInput" style="font:inherit;border:none;text-align:right;width:220px;background:transparent;color:var(--ink);"></span></div>
           <div class="meta-line"><span class="k">Huella (checksum)</span><span class="v" id="checksumOut"></span></div>
           <div class="meta-line"><span class="k">Tamaño</span><span class="v" id="sizeOut"></span></div>
         </div>
