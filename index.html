@@ -199,6 +199,22 @@
       linear-gradient(135deg, var(--accent-hover) 0%, var(--accent) 60%, #4a3a08 100%);
   }
 
+  .profile-gate{max-width:640px;margin:60px auto;}
+  .profile-gate .lead{text-align:center;margin-bottom:26px;}
+  .profile-gate .lead h2{font-family:'Inter',sans-serif;font-weight:800;font-size:20px;margin:0 0 6px;color:var(--ink);}
+  .profile-gate .lead p{font-size:13px;color:var(--muted);margin:0;}
+  .profile-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .profile-card{
+    background:var(--paper);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--rule);border-radius:var(--radius);padding:30px 22px;text-align:center;cursor:pointer;
+    transition:transform .15s, border-color .15s, box-shadow .15s;box-shadow:var(--shadow-1);
+  }
+  .profile-card:hover{transform:translateY(-3px);border-color:var(--accent-line);box-shadow:var(--shadow-2);}
+  .profile-card .p-icon{width:52px;height:52px;border-radius:12px;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;margin:0 auto 16px;}
+  .profile-card .p-title{font-family:'Inter',sans-serif;font-weight:800;font-size:15px;color:var(--ink);margin-bottom:6px;}
+  .profile-card .p-desc{font-size:12px;color:var(--muted);line-height:1.5;}
+  @media (max-width:560px){ .profile-row{grid-template-columns:1fr;} }
+
   .connect-box{text-align:center;padding:54px 20px;}
   .connect-box .big{font-size:16px;font-weight:700;margin-bottom:9px;color:var(--ink);}
   .connect-box .small{font-size:13px;color:var(--muted);margin-bottom:22px;max-width:420px;margin-left:auto;margin-right:auto;line-height:1.6;font-weight:500;}
@@ -227,7 +243,27 @@
     </div>
     <div class="brand-right">
       <span id="whoBadge"></span>
+      <button class="settings-toggle" onclick="showProfileGate()">Cambiar perfil</button>
       <button class="settings-toggle" onclick="toggleSettings()">Ajustes</button>
+    </div>
+  </div>
+
+  <div id="profileGate" class="profile-gate">
+    <div class="lead">
+      <h2>¿Cómo vas a entrar?</h2>
+      <p>Elige tu perfil para continuar</p>
+    </div>
+    <div class="profile-row">
+      <div class="profile-card" onclick="chooseProfile('admin')">
+        <div class="p-icon">🔑</div>
+        <div class="p-title">Administrador</div>
+        <div class="p-desc">Sube pedidos nuevos, descarga y borra archivos. Requiere conectar Google Drive.</div>
+      </div>
+      <div class="profile-card" onclick="chooseProfile('public')">
+        <div class="p-icon">👁</div>
+        <div class="p-title">Público</div>
+        <div class="p-desc">Consulta y visualiza los pedidos guardados. No requiere iniciar sesión.</div>
+      </div>
     </div>
   </div>
 
@@ -270,7 +306,7 @@
     </div>
   </div>
 
-  <div id="appBody">
+  <div id="appBody" style="display:none;">
     <div id="viewFiles">
       <div id="newFileBanner"></div>
 
@@ -653,6 +689,21 @@ async function init(){
 init();
 initGoogleAuth();
 
+function chooseProfile(role){
+  document.getElementById('profileGate').style.display = 'none';
+  document.getElementById('appBody').style.display = 'block';
+  if(role === 'admin'){
+    showTab('upload');
+  } else {
+    showTab('files');
+  }
+}
+
+function showProfileGate(){
+  document.getElementById('appBody').style.display = 'none';
+  document.getElementById('profileGate').style.display = 'block';
+}
+
 function toggleSettings(){
   const p = document.getElementById('settingsPanel');
   p.style.display = p.style.display === 'none' ? 'block' : 'none';
@@ -798,7 +849,7 @@ function renderFilesList(){
         </div>
         <div class="acts">
           <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
-          <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
+          ${driveToken ? `<button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>` : ''}
           ${driveToken ? `<button class="small danger" title="Borrar" onclick="deleteEntry('${e.id}','${e.filename.replace(/'/g,"")}')">✕</button>` : ''}
         </div>
       </div>`;
