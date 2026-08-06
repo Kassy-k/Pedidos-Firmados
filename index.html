@@ -12,7 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: #48484f; --paper: #59595f; --rule: #6d6d75; --rule-soft: #626269;
+    --bg: #48484f; --paper: rgba(48,48,54,.55); --rule: rgba(255,255,255,.14); --rule-soft: rgba(255,255,255,.08);
     --ink: #f7f7f6; --ink-soft: #dcdcda; --muted: #bcbcba;
     --accent: #c9a227; --accent-hover: #dab53f; --accent-dim: rgba(201,162,39,.20); --accent-line: rgba(201,162,39,.55);
     --mint: #c9a227; --mint-dim: rgba(201,162,39,.20); --mint-line: rgba(201,162,39,.55);
@@ -35,7 +35,7 @@
   }
   .wrap{max-width:760px;margin:0 auto;}
 
-  .brand{display:flex;align-items:center;gap:12px;margin-bottom:20px;background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow-1);}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:20px;background:var(--paper);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 20px;box-shadow:var(--shadow-1);}
   .seal{
     width:34px;height:34px;border-radius:8px;background:var(--accent);flex-shrink:0;
     display:flex;align-items:center;justify-content:center;font-weight:800;
@@ -61,10 +61,10 @@
   .step.done::before{border-color:var(--accent);background:var(--accent);}
   .step.done::after{background:var(--accent);}
 
-  .card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius);padding:22px;margin-bottom:16px;box-shadow:var(--shadow-1);}
+  .card{background:var(--paper);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--rule);border-radius:var(--radius);padding:22px;margin-bottom:16px;box-shadow:var(--shadow-1);}
 
   .stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;}
-  .stat-card{background:var(--paper);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 18px;}
+  .stat-card{background:var(--paper);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--rule);border-radius:var(--radius);padding:16px 18px;}
   .stat-card .label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;}
   .stat-card .value{font-size:26px;font-weight:800;color:var(--ink);line-height:1;}
   .stat-card .value.accent{color:var(--accent);}
