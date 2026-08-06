@@ -689,7 +689,17 @@ async function init(){
 init();
 initGoogleAuth();
 
+const ADMIN_PASSWORD = 'Kassel2026';
+
 function chooseProfile(role){
+  if(role === 'admin'){
+    const entered = prompt('Contraseña de administrador:');
+    if(entered === null) return;
+    if(entered !== ADMIN_PASSWORD){
+      alert('Contraseña incorrecta.');
+      return;
+    }
+  }
   document.getElementById('profileGate').style.display = 'none';
   document.getElementById('appBody').style.display = 'block';
   if(role === 'admin'){
