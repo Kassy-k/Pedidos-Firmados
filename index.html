@@ -781,6 +781,7 @@ function renderOwnerDashboard(){
 function renderStats(){
   const el = document.getElementById('statsRow');
   if(!el) return;
+  if(!driveToken){ el.innerHTML = ''; return; }
   const todayISO = mexicoCityTodayISO();
   const currentYM = todayISO.slice(0,7);
   const todayEntry = filesIndex.find(e => e.date === todayISO);
