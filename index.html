@@ -176,7 +176,7 @@
   .modal-box .modal-head h3{margin:0;font-size:13.5px;font-weight:700;color:var(--ink);}
   .modal-box .close{background:var(--rule-soft);border:none;font-size:15px;color:var(--ink-soft);cursor:pointer;padding:6px 10px;border-radius:var(--radius-sm);transition:background .15s,color .15s;}
   .modal-box .close:hover{background:var(--coral-dim);color:var(--coral);}
-  .modal-pages canvas{width:100%;border:1px solid var(--rule);margin-bottom:10px;border-radius:8px;}
+  .modal-pages canvas{width:100%;height:auto;border:1px solid var(--rule);margin-bottom:10px;border-radius:8px;}
 
   .month-folder{border:1px solid var(--rule);border-radius:var(--radius-md);margin:12px 0;overflow:hidden;box-shadow:var(--shadow-1);}
   .month-folder summary{
@@ -221,6 +221,24 @@
   .who-badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);font-weight:600;}
   .who-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-dim);}
 
+  @media (max-width:640px){
+    .owner-top-row{grid-template-columns:1fr;}
+    .owner-top-row .drop{padding:22px 14px;}
+    .month-card{padding:14px;}
+    .owner-foot{flex-wrap:wrap;gap:10px;}
+    .owner-foot button{margin-left:0;width:100%;}
+    .file-row{flex-wrap:wrap;}
+    .file-row .info{min-width:60%;}
+    .file-row .acts{margin-left:auto;}
+    .meta-line{flex-wrap:wrap;}
+    .meta-line .v{text-align:left;width:100%;}
+    .meta-line .v input[type=text]{width:100% !important;text-align:left !important;}
+    .month-folder summary{padding:18px 16px;font-size:13px;}
+    .drop{padding:28px 14px;}
+    .modal-box{padding:16px;}
+    .grid{grid-template-columns:repeat(auto-fill, minmax(96px,1fr));}
+  }
+
   @media (max-width:480px){
     body{padding:22px 12px 70px;}
     .card{padding:18px;}
@@ -229,6 +247,9 @@
     .brand-right{margin-left:0;}
     .stamp{width:110px;height:110px;}
     .stats-row{grid-template-columns:1fr;}
+    .profile-card{padding:22px 16px;}
+    .steps{padding:0;}
+    .step{font-size:9.5px;}
   }
 </style>
 
