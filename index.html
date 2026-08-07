@@ -864,7 +864,7 @@ function renderFilesList(){
         </div>
         <div class="acts">
           <button class="small secondary" onclick="viewEntry('${e.id}')">Ver</button>
-          ${driveToken ? `<button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>` : ''}
+          <button class="small secondary" onclick="downloadEntry('${e.id}','${e.filename.replace(/'/g,"")}')">Descargar</button>
           ${driveToken ? `<button class="small danger" title="Borrar" onclick="deleteEntry('${e.id}','${e.filename.replace(/'/g,"")}')">✕</button>` : ''}
         </div>
       </div>`;
