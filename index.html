@@ -982,8 +982,14 @@ function printCurrentPage(){
   win.document.write(`
     <html>
       <head><title>Imprimir página ${modalCurrentPage}</title></head>
-      <body style="margin:0;display:flex;justify-content:center;">
-        <img src="${dataUrl}" style="width:100%;max-width:900px;" onload="window.focus();window.print();">
+      <body style="margin:0;font-family:sans-serif;">
+        <div style="position:sticky;top:0;background:#fff;padding:12px;text-align:center;border-bottom:1px solid #ddd;" class="no-print">
+          <button onclick="window.print()" style="padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;">🖨 Imprimir esta página</button>
+        </div>
+        <div style="display:flex;justify-content:center;padding:16px;">
+          <img src="${dataUrl}" style="width:100%;max-width:900px;">
+        </div>
+        <style>@media print{ .no-print{ display:none; } }</style>
       </body>
     </html>
   `);
