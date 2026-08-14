@@ -981,7 +981,7 @@ function printCurrentPage(){
   if(!win){ alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio e intenta de nuevo.'); return; }
   win.document.write(`
     <html>
-      <head><title>Imprimir — ${(document.getElementById('modalTitle').textContent || 'Pedido')}</title></head>
+      <head><title>Imprimir página ${modalCurrentPage}</title></head>
       <body style="margin:0;display:flex;justify-content:center;">
         <img src="${dataUrl}" style="width:100%;max-width:900px;" onload="window.focus();window.print();">
       </body>
