@@ -726,6 +726,7 @@ async function init(){
   wireDropZone();
   await refreshIndex();
   await checkReminder();
+  setInterval(() => { refreshIndex(); }, 60 * 60 * 1000); // refresco automático cada 1 hora
 }
 init();
 initGoogleAuth();
