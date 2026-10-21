@@ -7,6 +7,7 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -105,6 +106,11 @@
   .thumb .n{position:absolute;top:5px;left:5px;background:var(--accent);color:#141414;font-size:11px;font-weight:800;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;}
   .thumb .rm{position:absolute;top:5px;right:5px;background:#141414;border:1px solid var(--rule);width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;line-height:1;color:var(--coral);}
   .thumb .rm:hover{background:var(--coral-dim);}
+  .thumb .store{position:absolute;left:5px;bottom:5px;right:5px;text-align:center;font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 4px;border-radius:5px;color:#fff;cursor:pointer;text-shadow:0 1px 2px rgba(0,0,0,.5);}
+  .thumb .store.inh{opacity:.65;font-weight:600;}
+  .thumb .store.none{background:#555;}
+  .store-summary{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;}
+  .store-summary span{font-size:12px;font-weight:700;color:#fff;padding:3px 9px;border-radius:999px;}
 
   .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;}
   button{font-family:'Inter',sans-serif;font-size:13px;font-weight:700;padding:10px 18px;border-radius:var(--radius-md);border:1px solid var(--accent);background:var(--accent);color:#141414;cursor:pointer;transition:background .15s, box-shadow .15s;}
@@ -388,11 +394,13 @@
         <input type="file" id="fileInput" multiple accept="image/*,application/pdf">
         <div id="grid" class="grid"></div>
         <div class="row" id="uploadActions" style="display:none;">
+          <button onclick="groupByStore()" id="btnGroupStore">Agrupar por tienda</button>
           <button onclick="runAutoOrder()" id="btnAutoOrder">Acomodar orden automáticamente</button>
           <button class="secondary" onclick="goToPreviewStep()">Continuar →</button>
           <button class="secondary" onclick="clearAll()">Vaciar</button>
         </div>
         <div class="hint">Si son varias páginas sueltas, arrastra las miniaturas para reordenar manualmente.</div>
+        <div class="store-summary" id="storeSummary"></div>
         <div class="status" id="uploadStatus"></div>
       </div>
 
@@ -1139,7 +1147,7 @@ function renderGrid(){
   units.forEach((u, idx) => {
     const div = document.createElement('div');
     div.className = 'thumb'; div.draggable = true; div.dataset.id = u.id;
-    div.innerHTML = `<span class="n">${idx+1}</span><img src="${u.thumb}"><span class="rm" onclick="removeUnit('${u.id}')">✕</span>`;
+    div.innerHTML = `<span class="n">${idx+1}</span><img src="${u.thumb}"><span class="rm" onclick="removeUnit('${u.id}')">✕</span>${storeBadgeHtml(u)}`;
     div.addEventListener('dragstart', () => div.classList.add('dragging'));
     div.addEventListener('dragend', () => { div.classList.remove('dragging'); renderGrid(); });
     div.addEventListener('dragover', e => {
@@ -1160,7 +1168,218 @@ function reorderFromDOM(){
   units.sort((a,b) => ids.indexOf(a.id) - ids.indexOf(b.id));
 }
 function removeUnit(id){ units = units.filter(u => u.id !== id); renderGrid(); }
-function clearAll(){ units = []; renderGrid(); document.getElementById('uploadStatus').textContent = ''; }
+function clearAll(){ units = []; srcBuffers.clear(); pdfJsDocs.clear(); document.getElementById('storeSummary').innerHTML = ''; renderGrid(); document.getElementById('uploadStatus').textContent = ''; }
+
+
+// ---------- Agrupar por tienda (lee el folio con OCR gratuito, en el navegador) ----------
+// Reglas:
+//  - SAL..., EAL..., DECO... -> un grupo por cada prefijo (SALPAC00057 -> SAL)
+//  - S-OMI57 (letra-guion-prefijo) -> se usa el prefijo despues del guion (OMI)
+//  - Sucursales: SFE4060 / COM-166 -> SFE / COM
+//  - Sin folio reconocible -> OTROS (juntas, al final de las tiendas)
+//  - Portada "REPROGRAMADOS" o "SERVICIOS": esa hoja y las siguientes quedan tal cual se escanearon
+const srcBuffers = new Map();   // srcKey -> ArrayBuffer del PDF original
+const pdfJsDocs = new Map();    // srcKey -> documento pdf.js
+let ocrWorker = null;
+const SECTIONS = ['REPROGRAMADOS', 'SERVICIOS'];
+
+function storeColor(code){
+  let h = 0; for(const ch of code) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h},55%,38%)`;
+}
+function storeBadgeHtml(u){
+  if(u.store === undefined) return '';
+  if(u.store === 'OTROS') return `<span class="store none" onclick="editStore('${u.id}')" title="Sin folio reconocido. Toca para escribirlo">OTROS</span>`;
+  return `<span class="store" style="background:${storeColor(u.store)}" onclick="editStore('${u.id}')" title="Toca para corregir">${u.store}${u.folioNum ? ' ' + u.folioNum : ''}</span>`;
+}
+function editStore(id){
+  const u = units.find(x => x.id === id); if(!u) return;
+  const v = prompt('Tienda de esta página (ej. SFE, SAL, EAL, DECO), o REPROGRAMADOS / SERVICIOS. Vacío = OTROS:', u.store === 'OTROS' ? '' : (u.store || ''));
+  if(v === null) return;
+  const code = v.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 14);
+  u.store = code || 'OTROS';
+  u.section = SECTIONS.includes(u.store);
+  u.folioNum = null; u.storeManual = true;
+  applyStoreSort(); renderGrid(); renderStoreSummary();
+}
+
+async function getOcrWorker(){
+  if(ocrWorker) return ocrWorker;
+  if(!window.Tesseract) throw new Error('No cargó el lector de texto. Revisa tu conexión y recarga la página.');
+  const w = await Tesseract.createWorker('eng');
+  await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-. ', tessedit_pageseg_mode: '6' });
+  ocrWorker = w;
+  return w;
+}
+
+async function getPdfJsDoc(key){
+  let d = pdfJsDocs.get(key);
+  if(!d){ d = await pdfjsLib.getDocument({ data: srcBuffers.get(key).slice(0) }).promise; pdfJsDocs.set(key, d); }
+  return d;
+}
+
+// Convierte los PDF cargados (incluso el de 100 páginas ya unido) en páginas individuales
+async function expandPdfUnits(status){
+  const out = [];
+  for(const u of units){
+    if(u.kind !== 'pdf'){ out.push(u); continue; }
+    const key = 's' + (uidCounter++);
+    srcBuffers.set(key, await u.file.arrayBuffer());
+    const doc = await getPdfJsDoc(key);
+    for(let i = 0; i < doc.numPages; i++){
+      status.innerHTML = `<span class="loader"></span>Separando páginas de ${u.file.name}… ${i+1}/${doc.numPages}`;
+      const page = await doc.getPage(i + 1);
+      const vp = page.getViewport({ scale: 0.5 });
+      const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+      await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+      out.push({ id: 'p' + (uidCounter++), kind: 'pdfpage', srcKey: key, pageIndex: i, file: u.file, thumb: c.toDataURL('image/jpeg', 0.8) });
+    }
+  }
+  units = out;
+}
+
+// Dibuja la página completa en un canvas del ancho indicado
+async function unitToCanvas(u, W){
+  const c = document.createElement('canvas');
+  if(u.kind === 'pdfpage'){
+    const doc = await getPdfJsDoc(u.srcKey);
+    const page = await doc.getPage(u.pageIndex + 1);
+    const base = page.getViewport({ scale: 1 });
+    const vp = page.getViewport({ scale: W / base.width });
+    c.width = vp.width; c.height = vp.height;
+    await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+  } else {
+    const bmp = await createImageBitmap(u.file);
+    const k = W / bmp.width;
+    c.width = W; c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    if(bmp.close) bmp.close();
+  }
+  return c;
+}
+
+function cropCanvas(src, x0, y0, x1, y1){
+  const c = document.createElement('canvas');
+  const sx = Math.round(src.width * x0), sy = Math.round(src.height * y0);
+  c.width = Math.round(src.width * (x1 - x0)); c.height = Math.round(src.height * (y1 - y0));
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+  g.drawImage(src, sx, sy, c.width, c.height, 0, 0, c.width, c.height);
+  return c;
+}
+function scaleCanvas(src, W){
+  const c = document.createElement('canvas');
+  c.width = W; c.height = Math.round(src.height * W / src.width);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+
+const NOT_STORE = new Set(['HOJA','PAG','PAGS','FOLIO','FECHA','TEL','NO','NUM','DE','DEL','CP','RFC','PROG','CANT','COL','INT','EXT']);
+function parseFolio(text){
+  const t = (text || '').toUpperCase().replace(/\s+/g, ' ');
+  let m;
+  // 1) Planeación / movimientos: SALPAC00057, EALOLV00016, DECOMET090
+  m = /\b(DECO|SAL|EAL)[A-Z]{0,8}[0-9OIL]{2,}\b/.exec(t);
+  if(m) return { code: m[1], num: null };
+  // 2) Servicios: S-OMI57 -> se toma el prefijo después del guion
+  m = /\b[A-Z]{1,2}\s*[-–—−]\s*([A-Z]{2,4})\s*[0-9OIL]{1,6}\b/.exec(t);
+  if(m && !NOT_STORE.has(m[1])) return { code: m[1], num: null };
+  // 3) Sucursales: SFE4060, COM-166 (letras pegadas al número, o con guion)
+  const re = /\b([A-Z]{2,4})(?:\s*[-–—−]\s*)?(\d{3,6})\b/g;
+  while((m = re.exec(t))){
+    if(!NOT_STORE.has(m[1])) return { code: m[1], num: m[2] };
+  }
+  return null;
+}
+
+// Portada de sección: casi sin texto y con la palabra REPROGRAMADOS o SERVICIOS
+function parseCover(text){
+  const t = (text || '').toUpperCase().replace(/\s+/g, ' ');
+  const words = t.split(' ').filter(w => w.length > 1);
+  if(words.length > 14) return null;
+  if(/REPROGRAM/.test(t)) return 'REPROGRAMADOS';
+  if(/\bSERVICIOS?\b/.test(t)) return 'SERVICIOS';
+  return null;
+}
+
+async function ocrText(worker, canvas){
+  const { data } = await worker.recognize(canvas);
+  return data.text;
+}
+
+async function coverOf(u, worker, page){
+  const c = page ? scaleCanvas(page, 1000) : await unitToCanvas(u, 1000);
+  return parseCover(await ocrText(worker, c));
+}
+
+// Devuelve { cover } si es portada, { code, num } si trae folio, o null
+async function readPage(u, inSection){
+  const worker = await getOcrWorker();
+  if(inSection){
+    const cover = await coverOf(u, worker, null);
+    return cover ? { cover } : null;
+  }
+  const page = await unitToCanvas(u, 1800);
+  // esquina superior derecha, franja superior, y zona media-derecha (No. de pedido)
+  const regions = [[0.4, 0, 1, 0.22], [0, 0, 1, 0.3], [0.4, 0.25, 1, 0.6]];
+  for(const r of regions){
+    const f = parseFolio(await ocrText(worker, cropCanvas(page, ...r)));
+    if(f) return f;
+  }
+  const cover = await coverOf(u, worker, page);
+  return cover ? { cover } : null;
+}
+
+function groupKey(u){
+  if(u.section) return 2;
+  return u.store === 'OTROS' ? 1 : 0;
+}
+function applyStoreSort(){
+  const rank = new Map(); units.forEach((u, i) => rank.set(u.id, i));
+  const codes = Array.from(new Set(units.filter(u => groupKey(u) === 0).map(u => u.store))).sort();
+  const secFirst = new Map();
+  units.forEach(u => { if(u.section && !secFirst.has(u.store)) secFirst.set(u.store, rank.get(u.id)); });
+  const sub = u => groupKey(u) === 0 ? codes.indexOf(u.store) : groupKey(u) === 2 ? secFirst.get(u.store) : 0;
+  units.sort((a, b) => (groupKey(a) - groupKey(b)) || (sub(a) - sub(b)) || (rank.get(a.id) - rank.get(b.id)));
+}
+
+function renderStoreSummary(){
+  const box = document.getElementById('storeSummary');
+  const counts = new Map();
+  units.forEach(u => { if(u.store === undefined) return; counts.set(u.store, (counts.get(u.store) || 0) + 1); });
+  const seen = []; units.forEach(u => { if(u.store !== undefined && !seen.includes(u.store)) seen.push(u.store); });
+  box.innerHTML = seen.map(k => `<span style="background:${k === 'OTROS' ? '#555' : storeColor(k)}">${k}: ${counts.get(k)} pág.</span>`).join('');
+}
+
+async function groupByStore(){
+  if(!units.length) return;
+  const btn = document.getElementById('btnGroupStore');
+  const status = document.getElementById('uploadStatus');
+  btn.disabled = true;
+  try{
+    await expandPdfUnits(status);
+    renderGrid();
+    status.innerHTML = '<span class="loader"></span>Preparando lector de folios (la primera vez descarga unos segundos)…';
+    let sectionCur = null;
+    for(let i = 0; i < units.length; i++){
+      const u = units[i];
+      status.innerHTML = `<span class="loader"></span>Leyendo folios… ${i+1}/${units.length}`;
+      if(u.storeManual){ if(u.section) sectionCur = u.store; continue; }
+      const r = await readPage(u, !!sectionCur);
+      if(r && r.cover){ sectionCur = r.cover; u.store = r.cover; u.section = true; u.folioNum = null; }
+      else if(sectionCur){ u.store = sectionCur; u.section = true; u.folioNum = null; }
+      else if(r){ u.store = r.code; u.section = false; u.folioNum = r.num; }
+      else { u.store = 'OTROS'; u.section = false; u.folioNum = null; }
+    }
+    applyStoreSort();
+    renderGrid(); renderStoreSummary();
+    const otros = units.filter(u => u.store === 'OTROS').length;
+    status.textContent = 'Listo: páginas agrupadas.' + (otros ? ` ${otros} sin folio reconocido quedaron en OTROS.` : '') + ' Toca cualquier etiqueta para corregirla.';
+  }catch(e){
+    status.textContent = 'No se pudo agrupar: ' + (e.message || e);
+  }
+  btn.disabled = false;
+}
 
 // ---------- AI auto order ----------
 async function runAutoOrder(){
@@ -1234,8 +1453,14 @@ async function goToPreviewStep(){
 
 async function buildMergedPdf(){
   const outDoc = await PDFDocument.create();
+  const libDocs = new Map();
   for(const u of units){
-    if(u.kind === 'image'){
+    if(u.kind === 'pdfpage'){
+      let src = libDocs.get(u.srcKey);
+      if(!src){ src = await PDFDocument.load(srcBuffers.get(u.srcKey).slice(0)); libDocs.set(u.srcKey, src); }
+      const [cp] = await outDoc.copyPages(src, [u.pageIndex]);
+      outDoc.addPage(cp);
+    } else if(u.kind === 'image'){
       const bytes = await u.file.arrayBuffer();
       let img;
       try{ img = u.file.type.includes('png') ? await outDoc.embedPng(bytes) : await outDoc.embedJpg(bytes); }
