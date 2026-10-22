@@ -1207,7 +1207,7 @@ async function getOcrWorker(){
   if(ocrWorker) return ocrWorker;
   if(!window.Tesseract) throw new Error('No cargó el lector de texto. Revisa tu conexión y recarga la página.');
   const w = await Tesseract.createWorker('eng');
-  await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-. ', tessedit_pageseg_mode: '6' });
+  await w.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-. ', tessedit_pageseg_mode: '6' });
   ocrWorker = w;
   return w;
 }
@@ -1280,14 +1280,14 @@ function parseFolio(text){
   let m;
   // 1) Planeación / movimientos: SALPAC00057, EALOLV00016, DECOMET090
   m = /\b(DECO|SAL|EAL)[A-Z]{0,8}[0-9OIL]{2,}\b/.exec(t);
-  if(m) return { code: m[1], num: null };
+  if(m) return { code: m[1], num: null, kind: 'known' };
   // 2) Servicios: S-OMI57 -> se toma el prefijo después del guion
   m = /\b[A-Z]{1,2}\s*[-–—−]\s*([A-Z]{2,4})\s*[0-9OIL]{1,6}\b/.exec(t);
-  if(m && !NOT_STORE.has(m[1])) return { code: m[1], num: null };
+  if(m && !NOT_STORE.has(m[1])) return { code: m[1], num: null, kind: 'known' };
   // 3) Sucursales: SFE4060, COM-166 (letras pegadas al número, o con guion)
   const re = /\b([A-Z]{2,4})(?:\s*[-–—−]\s*)?(\d{3,6})\b/g;
   while((m = re.exec(t))){
-    if(!NOT_STORE.has(m[1])) return { code: m[1], num: m[2] };
+    if(!NOT_STORE.has(m[1])) return { code: m[1], num: m[2], kind: 'branch' };
   }
   return null;
 }
@@ -1312,7 +1312,30 @@ async function coverOf(u, worker, page){
   return parseCover(await ocrText(worker, c));
 }
 
-// Devuelve { cover } si es portada, { code, num } si trae folio, o null
+// Aumenta el contraste para escaneos grises o saturados
+function enhance(c){
+  const o = document.createElement('canvas'); o.width = c.width; o.height = c.height;
+  const g = o.getContext('2d');
+  g.filter = 'grayscale(1) contrast(1.9) brightness(1.05)';
+  g.drawImage(c, 0, 0);
+  return o;
+}
+
+// Nombre de la tienda impreso en el encabezado (INTERLOMAS, Santa Fe...), junto al logo
+const ADDR_WORDS = /AVENIDA|AVEN|GENERAL|MARIANO|ESCOBEDO|HOME|LIVING|KASSEL|LOC\b|\bPB\b|\bCOL\b/;
+async function readHeaderName(worker, page){
+  const crop = cropCanvas(page, 0.25, 0.02, 0.7, 0.14);
+  for(const c of [crop, enhance(crop)]){
+    const t = await ocrText(worker, c);
+    for(const line of t.split('\n')){
+      const w = line.toUpperCase().replace(/[^A-Z ]/g, '').replace(/\s+/g, ' ').trim();
+      if(w.replace(/ /g, '').length >= 4 && !ADDR_WORDS.test(w)) return w.replace(/ /g, '');
+    }
+  }
+  return null;
+}
+
+// Devuelve { cover } si es portada, o { code, num, kind, name } (code puede ser null)
 async function readPage(u, inSection){
   const worker = await getOcrWorker();
   if(inSection){
@@ -1322,12 +1345,62 @@ async function readPage(u, inSection){
   const page = await unitToCanvas(u, 1800);
   // esquina superior derecha, franja superior, y zona media-derecha (No. de pedido)
   const regions = [[0.4, 0, 1, 0.22], [0, 0, 1, 0.3], [0.4, 0.25, 1, 0.6]];
+  let f = null;
   for(const r of regions){
-    const f = parseFolio(await ocrText(worker, cropCanvas(page, ...r)));
-    if(f) return f;
+    f = parseFolio(await ocrText(worker, cropCanvas(page, ...r)));
+    if(f) break;
   }
-  const cover = await coverOf(u, worker, page);
-  return cover ? { cover } : null;
+  if(!f){  // escaneo saturado: reintentar con más contraste
+    for(const r of regions.slice(0, 2)){
+      f = parseFolio(await ocrText(worker, enhance(cropCanvas(page, ...r))));
+      if(f) break;
+    }
+  }
+  if(f && f.kind === 'known') return f;
+  if(!f){
+    const cover = await coverOf(u, worker, page);
+    if(cover) return { cover };
+  }
+  const name = await readHeaderName(worker, page);
+  return { code: f ? f.code : null, num: f ? f.num : null, kind: f ? f.kind : null, name };
+}
+
+// Cercanía entre dos nombres (tolera 1-2 letras mal leídas)
+function editDistance(a, b){
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for(let j = 1; j <= b.length; j++) d[0][j] = j;
+  for(let i = 1; i <= a.length; i++) for(let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
+// Sucursales: el nombre impreso en el encabezado (INTERLOMAS, SANTA FE...) manda para agrupar.
+// Si en una página no se pudo leer el nombre pero sí el folio (INT9167), se le asigna el nombre
+// que otras páginas con ese mismo código sí tuvieron. Nombres casi iguales se unen en uno solo.
+function resolveByName(){
+  const cand = units.filter(u => !u.storeManual && !u.section && u._kind !== 'known' && (u._code || u._name));
+  const freq = new Map();
+  cand.forEach(u => { if(u._name) freq.set(u._name, (freq.get(u._name) || 0) + 1); });
+  const canon = [];
+  Array.from(freq.entries()).sort((a, b) => b[1] - a[1]).forEach(([n]) => {
+    if(!canon.some(c => editDistance(c, n) <= 2)) canon.push(n);
+  });
+  const canonOf = n => n && (canon.find(c => editDistance(c, n) <= 2) || n);
+  const votes = new Map();
+  cand.forEach(u => {
+    if(!u._name || !u._code) return;
+    const m = votes.get(u._code) || new Map(), n = canonOf(u._name);
+    m.set(n, (m.get(n) || 0) + 1); votes.set(u._code, m);
+  });
+  const codeName = new Map();
+  votes.forEach((m, k) => codeName.set(k, Array.from(m.entries()).sort((a, b) => b[1] - a[1])[0][0]));
+  cand.forEach(u => {
+    let name = canonOf(u._name);
+    if(!name && u._code){
+      name = codeName.get(u._code) || canon.find(n => u._code.length >= 3 && n.startsWith(u._code)) || null;   // INTERLOMAS <- INT
+    }
+    u.store = (name || u._code).slice(0, 22);
+  });
 }
 
 function groupKey(u){
@@ -1368,9 +1441,10 @@ async function groupByStore(){
       const r = await readPage(u, !!sectionCur);
       if(r && r.cover){ sectionCur = r.cover; u.store = r.cover; u.section = true; u.folioNum = null; }
       else if(sectionCur){ u.store = sectionCur; u.section = true; u.folioNum = null; }
-      else if(r){ u.store = r.code; u.section = false; u.folioNum = r.num; }
-      else { u.store = 'OTROS'; u.section = false; u.folioNum = null; }
+      else if(r){ u.section = false; u._code = r.code; u._name = r.name || null; u._kind = r.kind || null; u.store = r.code || 'OTROS'; u.folioNum = r.num; }
+      else { u.store = 'OTROS'; u.section = false; u.folioNum = null; u._code = null; u._name = null; u._kind = null; }
     }
+    resolveByName();
     applyStoreSort();
     renderGrid(); renderStoreSummary();
     const otros = units.filter(u => u.store === 'OTROS').length;
